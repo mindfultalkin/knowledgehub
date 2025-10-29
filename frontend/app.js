@@ -1,6 +1,6 @@
 // Knowledge Hub - Enhanced Frontend with All Features
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = window.env?.FRONTEND_API_BASE_URL || 'http://localhost:8000';
 
 // Application State
 const appState = {
