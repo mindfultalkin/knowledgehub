@@ -33,7 +33,7 @@ class SimpleTagger:
         }
     }
     
-    # Common business/content tags
+    # Common business/content tags - EXPANDED
     CONTENT_KEYWORDS = {
         'business': ['business', 'company', 'enterprise', 'corporate'],
         'meeting': ['meeting', 'conference', 'discussion', 'standup'],
@@ -50,7 +50,23 @@ class SimpleTagger:
         'quarterly': ['q1', 'q2', 'q3', 'q4', 'quarterly', 'quarter'],
         'annual': ['annual', 'yearly', 'year'],
         'strategy': ['strategy', 'strategic', 'planning'],
-        'data': ['data', 'analytics', 'statistics', 'metrics']
+        'data': ['data', 'analytics', 'statistics', 'metrics'],
+        'contract': ['contract', 'agreement', 'terms'],
+        'legal': ['legal', 'law', 'clause', 'provision'],
+        'template': ['template', 'form', 'sample'],
+        'draft': ['draft', 'version', 'revision'],
+        'final': ['final', 'approved', 'signed'],
+        'rental': ['rental', 'lease', 'rent'],
+        'employment': ['employment', 'employee', 'job'],
+        'invoice': ['invoice', 'bill', 'payment'],
+        'receipt': ['receipt', 'proof', 'transaction'],
+        'proposal': ['proposal', 'bid', 'offer'],
+        'memo': ['memo', 'note', 'notice'],
+        'policy': ['policy', 'procedure', 'guideline'],
+        'manual': ['manual', 'guide', 'handbook'],
+        'training': ['training', 'course', 'workshop'],
+        'certificate': ['certificate', 'certification', 'diploma'],
+        'license': ['license', 'permit', 'authorization']
     }
     
     def extract_tags_from_filename(self, filename):
@@ -96,27 +112,28 @@ class SimpleTagger:
         return tags
     
     def generate_tags(self, file_name, mime_type=None, description=None):
-        """Generate all tags for a file"""
+        """Generate ALL tags for a file (NO LIMITS!)"""
         tags = set()
         
-        # 1. Tags from filename
+        # 1. Tags from filename - ALL TAGS (no limit)
         filename_tags = self.extract_tags_from_filename(file_name)
-        tags.update(filename_tags[:5])  # Limit to 5 filename tags
+        tags.update(filename_tags)  # Add ALL filename tags
         
         # 2. File type tag
         if mime_type:
             file_type = self.detect_file_type(mime_type)
             tags.add(file_type)
         
-        # 3. Content-based tags
+        # 3. Content-based tags - ALL TAGS
         content_tags = self.generate_content_tags(file_name)
-        tags.update(content_tags)
+        tags.update(content_tags)  # Add ALL content tags
         
-        # 4. Tags from description if available
+        # 4. Tags from description if available - ALL TAGS
         if description:
             desc_tags = self.extract_tags_from_filename(description)
-            tags.update(desc_tags[:3])
+            tags.update(desc_tags)  # Add ALL description tags
         
+        # Return all unique tags as a list
         return list(tags)
     
     def get_confidence_score(self, tag, file_name, mime_type=None):

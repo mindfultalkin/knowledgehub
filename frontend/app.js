@@ -429,7 +429,10 @@ function renderDashboard() {
 function renderFileCard(file) {
   // Pass both mimeType and fileName for better icon detection
   const icon = `<div style="font-size:3.5rem;">${getFileIcon(file.mimeType, file.name)}</div>`;
-    
+  
+  // Get all tags (no limit)
+  const allTags = file.aiTags || [];
+  
   return `
     <div class="file-card" onclick='viewFile(${JSON.stringify(file).replace(/'/g, "&apos;")})'>
       <div class="file-thumbnail">${icon}</div>
@@ -441,12 +444,13 @@ function renderFileCard(file) {
           <span>💾 ${formatFileSize(file.size)}</span>
         </div>
         <div class="file-tags">
-          ${(file.aiTags || []).slice(0, 3).map(tag => `<span class="tag">${tag}</span>`).join('')}
+          ${allTags.map(tag => `<span class="tag">${tag}</span>`).join('')}
         </div>
       </div>
     </div>
   `;
 }
+
 
 
 
@@ -717,9 +721,23 @@ function renderSettings() {
 
 // Event Handlers
 function handleSearch(event) {
-  appState.searchQuery = event.target.value.toLowerCase();
+  const input = event.target;
+  const cursorPosition = input.selectionStart; // Save cursor position
+  
+  appState.searchQuery = input.value.toLowerCase();
   filterFiles();
+  
+  // Restore cursor position after re-render
+  setTimeout(() => {
+    const searchInput = document.querySelector('.search-input');
+    if (searchInput) {
+      searchInput.value = input.value;
+      searchInput.setSelectionRange(cursorPosition, cursorPosition);
+      searchInput.focus();
+    }
+  }, 0);
 }
+ 
 
 function handleFileTypeFilter(event) {
   appState.selectedFileType = event.target.value;

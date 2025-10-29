@@ -786,3 +786,43 @@ body {
 .logout-button:active {
   transform: translateY(0);
 }
+
+/* File Tags - Better wrapping for many tags */
+.file-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 80px; /* Limit height */
+  overflow-y: auto; /* Scroll if too many tags */
+  margin-top: 8px;
+}
+
+.file-tags::-webkit-scrollbar {
+  width: 4px;
+}
+
+.file-tags::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+}
+
+.file-tags::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 2px;
+}
+
+.tag {
+  background: var(--bg-tertiary);
+  color: var(--primary-color);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Compact tag display */
+.file-card .file-tags {
+  padding-right: 4px;
+}
