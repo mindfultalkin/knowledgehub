@@ -9,3 +9,4 @@ packaging>=21.0
 cachetools>=4.2.0
 pyasn1-modules>=0.2.1
 rsa>=4.7
+python-dotenv==1.0.0

@@ -5,6 +5,8 @@ from typing import Optional
 import config
 from google_drive import GoogleDriveClient
 from tagging import SimpleTagger
+from dotenv import set_key
+import os
 
 # Create FastAPI app FIRST
 app = FastAPI(title="Knowledge Hub Backend", version="1.0.0")
@@ -12,7 +14,7 @@ app = FastAPI(title="Knowledge Hub Backend", version="1.0.0")
 # Add CORS middleware IMMEDIATELY after creating app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
+    allow_origins=config.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,7 +33,8 @@ async def root():
     return {
         "message": "Knowledge Hub Backend API",
         "version": "1.0.0",
-        "authenticated": drive_client.creds is not None
+        "authenticated": drive_client.creds is not None,
+        "config_source": ".env file"
     }
 
 @app.get("/health")
@@ -47,7 +50,7 @@ async def google_auth():
         auth_url, _ = drive_client.get_authorization_url(redirect_uri)
         return {"auth_url": auth_url}
     except Exception as e:
-        print(f"Error in google_auth: {str(e)}")
+        print(f"❌ Error in google_auth: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/oauth2callback")
@@ -61,8 +64,28 @@ async def oauth2callback(code: str):
         return RedirectResponse(url="http://localhost:5500?auth=success")
         
     except Exception as e:
-        print(f"Error in oauth2callback: {str(e)}")
+        print(f"❌ Error in oauth2callback: {str(e)}")
         return RedirectResponse(url=f"http://localhost:5500?auth=error&message={str(e)}")
+
+@app.post("/auth/logout")
+async def logout():
+    """Logout and clear saved credentials from .env"""
+    try:
+        # Clear tokens from .env
+        env_file = '.env'
+        set_key(env_file, 'GOOGLE_ACCESS_TOKEN', '')
+        set_key(env_file, 'GOOGLE_REFRESH_TOKEN', '')
+        set_key(env_file, 'GOOGLE_TOKEN_EXPIRY', '')
+        
+        # Clear the drive client credentials
+        drive_client.creds = None
+        drive_client.service = None
+        
+        print("✅ Logged out successfully - credentials cleared from .env")
+        return {"message": "Logged out successfully"}
+    except Exception as e:
+        print(f"❌ Error during logout: {str(e)}")
+        return {"message": "Logout completed (with minor issues)"}
 
 @app.get("/auth/status")
 async def auth_status():
@@ -133,7 +156,7 @@ async def get_files(
         }
         
     except Exception as e:
-        print(f"Error getting files: {str(e)}")
+        print(f"❌ Error getting files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/drive/files/{file_id}")
@@ -203,6 +226,8 @@ async def get_all_tags():
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting Knowledge Hub Backend...")
-    print("Backend will be available at: http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    print("🚀 Starting Knowledge Hub Backend...")
+    print("📁 Using .env file for configuration")
+    print("🌐 Backend will be available at: http://localhost:8000")
+    print("=" * 60)
+    uvicorn.run(app, host=config.BACKEND_HOST, port=config.BACKEND_PORT, log_level="info")

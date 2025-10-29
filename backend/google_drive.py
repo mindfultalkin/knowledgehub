@@ -4,24 +4,41 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import os
 import json
+import config
+from datetime import datetime
+from dotenv import load_dotenv, set_key
+
+# Load environment variables
+load_dotenv()
 
 class GoogleDriveClient:
-    """Google Drive API Client for file operations"""
+    """Google Drive API Client for file operations using .env configuration"""
     
-    def __init__(self, credentials_path='credentials/client_secret.json'):
-        self.credentials_path = credentials_path
+    def __init__(self):
         self.creds = None
         self.service = None
-        self.scopes = [
-            'https://www.googleapis.com/auth/drive.readonly',
-            'https://www.googleapis.com/auth/drive.metadata.readonly'
-        ]
+        self.scopes = config.SCOPES
+        self.client_config = self._build_client_config()
+        
+    def _build_client_config(self):
+        """Build client config from environment variables instead of JSON file"""
+        return {
+            "web": {
+                "client_id": config.GOOGLE_CLIENT_ID,
+                "client_secret": config.GOOGLE_CLIENT_SECRET,
+                "project_id": config.GOOGLE_PROJECT_ID,
+                "auth_uri": config.GOOGLE_AUTH_URI,
+                "token_uri": config.GOOGLE_TOKEN_URI,
+                "auth_provider_x509_cert_url": config.GOOGLE_AUTH_PROVIDER_CERT_URL,
+                "redirect_uris": config.GOOGLE_REDIRECT_URIS
+            }
+        }
         
     def get_authorization_url(self, redirect_uri):
         """Get OAuth authorization URL"""
         try:
-            flow = Flow.from_client_secrets_file(
-                self.credentials_path,
+            flow = Flow.from_client_config(
+                self.client_config,
                 scopes=self.scopes,
                 redirect_uri=redirect_uri
             )
@@ -33,17 +50,18 @@ class GoogleDriveClient:
                 prompt='consent'
             )
             
+            print(f"✅ Authorization URL generated successfully")
             return authorization_url, flow
             
         except Exception as e:
-            print(f"Error creating authorization URL: {str(e)}")
+            print(f"❌ Error creating authorization URL: {str(e)}")
             raise
     
     def exchange_code_for_credentials(self, code, redirect_uri):
         """Exchange authorization code for credentials"""
         try:
-            flow = Flow.from_client_secrets_file(
-                self.credentials_path,
+            flow = Flow.from_client_config(
+                self.client_config,
                 scopes=self.scopes,
                 redirect_uri=redirect_uri
             )
@@ -52,54 +70,86 @@ class GoogleDriveClient:
             flow.fetch_token(code=code)
             self.creds = flow.credentials
             
-            # Save credentials for later use
-            self.save_credentials()
+            # Save credentials to .env
+            self.save_credentials_to_env()
             self.build_service()
             
+            print("✅ Successfully exchanged code for credentials")
             return self.creds
             
         except Exception as e:
-            print(f"Error exchanging code: {str(e)}")
+            print(f"❌ Error exchanging code: {str(e)}")
             raise
     
-    def save_credentials(self):
-        """Save credentials to file"""
+    def save_credentials_to_env(self):
+        """Save credentials to .env file"""
         try:
             if self.creds:
-                os.makedirs('credentials', exist_ok=True)
-                with open('credentials/token.json', 'w') as token:
-                    token.write(self.creds.to_json())
-                print("Credentials saved successfully")
+                env_file = '.env'
+                
+                # Update .env file with new tokens
+                set_key(env_file, 'GOOGLE_ACCESS_TOKEN', self.creds.token or '')
+                set_key(env_file, 'GOOGLE_REFRESH_TOKEN', self.creds.refresh_token or '')
+                
+                if self.creds.expiry:
+                    expiry_str = self.creds.expiry.isoformat()
+                    set_key(env_file, 'GOOGLE_TOKEN_EXPIRY', expiry_str)
+                
+                print("✅ Credentials saved to .env file")
+                
+                # Reload environment variables
+                load_dotenv(override=True)
+                
         except Exception as e:
-            print(f"Error saving credentials: {str(e)}")
+            print(f"❌ Error saving credentials to .env: {str(e)}")
     
     def load_credentials(self):
-        """Load saved credentials"""
+        """Load saved credentials from .env"""
         try:
-            if os.path.exists('credentials/token.json'):
-                with open('credentials/token.json', 'r') as token:
-                    creds_data = json.load(token)
-                    self.creds = Credentials.from_authorized_user_info(creds_data, self.scopes)
+            # Check if we have token information in .env
+            access_token = config.GOOGLE_ACCESS_TOKEN
+            refresh_token = config.GOOGLE_REFRESH_TOKEN
+            
+            if not access_token and not refresh_token:
+                print("ℹ️  No saved credentials found in .env")
+                return False
+            
+            # Build credentials from .env
+            token_data = {
+                'token': access_token,
+                'refresh_token': refresh_token,
+                'token_uri': config.GOOGLE_TOKEN_URI,
+                'client_id': config.GOOGLE_CLIENT_ID,
+                'client_secret': config.GOOGLE_CLIENT_SECRET,
+                'scopes': self.scopes
+            }
+            
+            if config.GOOGLE_TOKEN_EXPIRY:
+                token_data['expiry'] = config.GOOGLE_TOKEN_EXPIRY
+            
+            self.creds = Credentials.from_authorized_user_info(token_data, self.scopes)
+            
+            # Check if credentials are valid
+            if self.creds and self.creds.valid:
+                self.build_service()
+                print("✅ Loaded existing credentials from .env")
+                return True
+            elif self.creds and self.creds.expired and self.creds.refresh_token:
+                # Try to refresh
+                try:
+                    from google.auth.transport.requests import Request
+                    self.creds.refresh(Request())
+                    self.save_credentials_to_env()
+                    self.build_service()
+                    print("✅ Refreshed expired credentials")
+                    return True
+                except Exception as e:
+                    print(f"⚠️  Credentials expired and couldn't refresh: {str(e)}")
+                    return False
                     
-                    # Check if credentials are valid
-                    if self.creds and self.creds.valid:
-                        self.build_service()
-                        print("Loaded existing credentials")
-                        return True
-                    elif self.creds and self.creds.expired and self.creds.refresh_token:
-                        # Try to refresh
-                        try:
-                            from google.auth.transport.requests import Request
-                            self.creds.refresh(Request())
-                            self.save_credentials()
-                            self.build_service()
-                            print("Refreshed credentials")
-                            return True
-                        except:
-                            print("Credentials expired and couldn't refresh")
-                            return False
         except Exception as e:
-            print(f"Error loading credentials: {str(e)}")
+            print(f"❌ Error loading credentials from .env: {str(e)}")
+        
         return False
     
     def build_service(self):
@@ -107,9 +157,9 @@ class GoogleDriveClient:
         try:
             if self.creds:
                 self.service = build('drive', 'v3', credentials=self.creds)
-                print("Google Drive service built successfully")
+                print("✅ Google Drive service built successfully")
         except Exception as e:
-            print(f"Error building service: {str(e)}")
+            print(f"❌ Error building service: {str(e)}")
     
     def list_files(self, page_size=100, page_token=None, query=None):
         """List files from Google Drive"""
@@ -133,14 +183,14 @@ class GoogleDriveClient:
                 orderBy="modifiedTime desc"
             ).execute()
             
-            print(f"Retrieved {len(results.get('files', []))} files")
+            print(f"✅ Retrieved {len(results.get('files', []))} files")
             return results
             
         except HttpError as error:
-            print(f"An HTTP error occurred: {error}")
+            print(f"❌ An HTTP error occurred: {error}")
             raise
         except Exception as error:
-            print(f"An error occurred: {error}")
+            print(f"❌ An error occurred: {error}")
             raise
     
     def get_file(self, file_id):
@@ -159,7 +209,7 @@ class GoogleDriveClient:
             return file
             
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            print(f"❌ An error occurred: {error}")
             raise
     
     def get_about(self):
@@ -175,5 +225,5 @@ class GoogleDriveClient:
             return about
             
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            print(f"❌ An error occurred: {error}")
             raise
