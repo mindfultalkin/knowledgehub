@@ -1,0 +1,39 @@
+# Node and React
+node_modules/
+dist/
+build/
+.DS_Store
+
+# Environment files
+.env
+*.env
+
+# Python virtual environment
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Credentials or secrets
+backend/credentials/client_secret.json
+
+# Logs and temp files
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.cache
+*.tmp
+
+# VSCode & IDE settings
+.vscode/
+.idea/
+*.swp
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
