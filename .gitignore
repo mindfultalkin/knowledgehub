@@ -16,6 +16,7 @@ __pycache__/
 
 # Credentials or secrets
 backend/credentials/client_secret.json
+backend/credentials/token.json
 
 # Logs and temp files
 *.log
