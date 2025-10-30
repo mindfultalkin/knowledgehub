@@ -55,12 +55,27 @@ async def root():
     }
 
 
+# @app.get("/health")
+# async def health():
+#     return {
+#         "status": "healthy",
+#         "environment": os.getenv("VERCEL_ENV", "local"),
+#         "authenticated": drive_client.creds is not None
+#     }
 @app.get("/health")
 async def health():
+    # Debug information for verifying environment variables
+    debug_env = {
+        "VERCEL_ENV": os.getenv("VERCEL_ENV"),
+        "GOOGLE_CLIENT_ID": bool(os.getenv("GOOGLE_CLIENT_ID")),
+        "GOOGLE_CLIENT_SECRET": bool(os.getenv("GOOGLE_CLIENT_SECRET")),
+        "SERVICE_API_BASE_URL": os.getenv("SERVICE_API_BASE_URL"),
+        "FRONTEND_URL": os.getenv("FRONTEND_URL"),
+    }
+
     return {
-        "status": "healthy",
-        "environment": os.getenv("VERCEL_ENV", "local"),
-        "authenticated": drive_client.creds is not None
+        "status": "healthy" if all(debug_env.values()) else "env_missing",
+        "env_check": debug_env,
     }
 
 
