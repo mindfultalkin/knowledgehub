@@ -2,11 +2,20 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from typing import Optional
-from . import config
-from .google_drive import GoogleDriveClient
-from .tagging import SimpleTagger
-from dotenv import set_key
 import os
+import sys
+
+# Add backend directory to path for imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Import modules - use absolute imports for Vercel
+import config
+from google_drive import GoogleDriveClient
+from tagging import SimpleTagger
+
+# Only import dotenv functions if not in production
+if os.getenv("VERCEL_ENV") != "production":
+    from dotenv import set_key
 
 # ----------------------------------------------------
 # App Initialization
@@ -25,7 +34,10 @@ app.add_middleware(
 # Clients
 drive_client = GoogleDriveClient()
 tagger = SimpleTagger()
-drive_client.load_credentials()
+
+# Only load credentials from file if not in production (local development)
+if os.getenv("VERCEL_ENV") != "production":
+    drive_client.load_credentials()
 
 # ----------------------------------------------------
 # Routes
@@ -37,7 +49,7 @@ async def root():
         "message": "Knowledge Hub Backend API",
         "version": "1.0.0",
         "authenticated": drive_client.creds is not None,
-        "config_source": ".env file",
+        "environment": os.getenv("VERCEL_ENV", "local"),
         "api_base_url": config.SERVICE_API_BASE_URL,
         "frontend_url": config.FRONTEND_URL,
     }
@@ -45,14 +57,18 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "environment": os.getenv("VERCEL_ENV", "local"),
+        "authenticated": drive_client.creds is not None
+    }
 
 
 @app.get("/auth/google")
 async def google_auth():
     """Start Google OAuth flow"""
     try:
-        redirect_uri = f"{config.SERVICE_API_BASE_URL}/oauth2callback"
+        redirect_uri = f"{config.SERVICE_API_BASE_URL}/api/oauth2callback"
         auth_url, _ = drive_client.get_authorization_url(redirect_uri)
         return {"auth_url": auth_url}
     except Exception as e:
@@ -64,7 +80,7 @@ async def google_auth():
 async def oauth2callback(code: str):
     """Handle OAuth callback"""
     try:
-        redirect_uri = f"{config.SERVICE_API_BASE_URL}/oauth2callback"
+        redirect_uri = f"{config.SERVICE_API_BASE_URL}/api/oauth2callback"
         drive_client.exchange_code_for_credentials(code, redirect_uri)
 
         # Redirect to frontend after successful authentication
@@ -77,17 +93,19 @@ async def oauth2callback(code: str):
 
 @app.post("/auth/logout")
 async def logout():
-    """Logout and clear saved credentials from .env"""
+    """Logout and clear saved credentials"""
     try:
-        env_file = os.path.join(os.path.dirname(__file__), ".env")
-        set_key(env_file, "GOOGLE_ACCESS_TOKEN", "")
-        set_key(env_file, "GOOGLE_REFRESH_TOKEN", "")
-        set_key(env_file, "GOOGLE_TOKEN_EXPIRY", "")
+        # Only update .env file in local development
+        if os.getenv("VERCEL_ENV") != "production":
+            env_file = os.path.join(os.path.dirname(__file__), ".env")
+            set_key(env_file, "GOOGLE_ACCESS_TOKEN", "")
+            set_key(env_file, "GOOGLE_REFRESH_TOKEN", "")
+            set_key(env_file, "GOOGLE_TOKEN_EXPIRY", "")
 
         drive_client.creds = None
         drive_client.service = None
 
-        print("✅ Logged out successfully - credentials cleared from .env")
+        print("✅ Logged out successfully")
         return {"message": "Logged out successfully"}
     except Exception as e:
         print(f"❌ Error during logout: {e}")
@@ -107,7 +125,8 @@ async def auth_status():
                 "email": about["user"]["emailAddress"],
                 "displayName": about["user"]["displayName"],
             }
-        except:
+        except Exception as e:
+            print(f"Error getting user info: {e}")
             pass
 
     return {"authenticated": is_authenticated, "user": user_info}
@@ -196,6 +215,7 @@ async def get_all_tags():
     return {"categories": list(tagger.CATEGORIES.keys()), "contentTags": list(tagger.CONTENT_KEYWORDS.keys())}
 
 
+# For local development
 if __name__ == "__main__":
     import uvicorn
 
@@ -206,3 +226,6 @@ if __name__ == "__main__":
     print("=" * 60)
 
     uvicorn.run("main:app", host=config.BACKEND_HOST, port=config.BACKEND_PORT, log_level="info", reload=True)
+
+# For Vercel serverless (IMPORTANT: This must be present)
+handler = app
