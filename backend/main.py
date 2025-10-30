@@ -2,9 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from typing import Optional
-import config
-from google_drive import GoogleDriveClient
-from tagging import SimpleTagger
+from backend import config
+from backend.google_drive import GoogleDriveClient
+from backend.tagging import SimpleTagger
 from dotenv import set_key
 import os
 
@@ -12,7 +12,7 @@ import os
 # App Initialization
 # ----------------------------------------------------
 app = FastAPI(title="Knowledge Hub Backend", version="1.0.0")
-
+app = FastAPI(root_path="/api")
 # CORS Setup
 app.add_middleware(
     CORSMiddleware,
@@ -205,4 +205,4 @@ if __name__ == "__main__":
     print(f"💻 Frontend URL: {config.FRONTEND_URL}")
     print("=" * 60)
 
-    uvicorn.run(app, host=config.BACKEND_HOST, port=config.BACKEND_PORT, log_level="info")
+    uvicorn.run("main:app", host=config.BACKEND_HOST, port=config.BACKEND_PORT, log_level="info", reload=True)
