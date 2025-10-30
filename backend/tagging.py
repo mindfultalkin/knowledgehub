@@ -9,7 +9,7 @@ class SimpleTagger:
         'document': {
             'keywords': ['doc', 'pdf', 'text', 'document', 'report', 'presentation', 'sheet', 'slide'],
             'mimetypes': ['application/pdf', 'application/msword', 
-                         'application/vnd.openxmlformats', 'text/']
+                        'application/vnd.openxmlformats', 'text/']
         },
         'image': {
             'keywords': ['image', 'photo', 'picture', 'screenshot', 'graphic', 'design'],

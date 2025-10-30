@@ -1,7 +1,7 @@
 // Knowledge Hub - Enhanced Frontend with All Features
 
-const API_BASE_URL = window.env?.FRONTEND_API_BASE_URL || 'http://localhost:8000';
-
+const API_BASE_URL = window.RUNTIME_ENV?.SERVICE_API_BASE_URL;
+console.log('API_BASE_URL:', API_BASE_URL);
 // Application State
 const appState = {
   currentView: 'dashboard',
@@ -737,7 +737,6 @@ function handleSearch(event) {
     }
   }, 0);
 }
- 
 
 function handleFileTypeFilter(event) {
   appState.selectedFileType = event.target.value;
