@@ -2,17 +2,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from typing import Optional
-from backend import config
-from backend.google_drive import GoogleDriveClient
-from backend.tagging import SimpleTagger
+from . import config
+from .google_drive import GoogleDriveClient
+from .tagging import SimpleTagger
 from dotenv import set_key
 import os
 
 # ----------------------------------------------------
 # App Initialization
 # ----------------------------------------------------
-app = FastAPI(title="Knowledge Hub Backend", version="1.0.0")
-app = FastAPI(root_path="/api")
+app = FastAPI(title="Knowledge Hub Backend", version="1.0.0", root_path="/api")
+
 # CORS Setup
 app.add_middleware(
     CORSMiddleware,

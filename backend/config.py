@@ -36,7 +36,7 @@ SCOPES = os.getenv(
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8000))
 SERVICE_API_BASE_URL = os.getenv("SERVICE_API_BASE_URL", f"http://{BACKEND_HOST}:{BACKEND_PORT}")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5500", "https://knowledgehub-eta.vercel.app/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://knowledgehub-eta.vercel.app/")
 
 # ----------------------------------------------------
 # CORS Configuration
