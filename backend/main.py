@@ -271,6 +271,8 @@ async def get_all_tags():
         "contentTags": list(tagger.CONTENT_KEYWORDS.keys())
     }
 
+handler = Mangum(app, lifespan="off")
+
 
 # For local development (do not run on import)
 if __name__ == "__main__":
@@ -281,5 +283,3 @@ if __name__ == "__main__":
     print(f"Frontend URL: {FRONTEND_URL}")
     print("=" * 60)
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
-
-handler = Mangum(app)
