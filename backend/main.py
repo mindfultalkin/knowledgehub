@@ -1,3 +1,4 @@
+# backend/main.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -84,7 +85,6 @@ async def root():
 
 
 @app.get("/health")
-@app.get("/health")
 async def health():
     """Health check endpoint"""
     return {
@@ -140,8 +140,9 @@ async def logout():
             set_key(env_file, "GOOGLE_REFRESH_TOKEN", "")
             set_key(env_file, "GOOGLE_TOKEN_EXPIRY", "")
 
-        drive_client.creds = None
-        drive_client.service = None
+        if drive_client:
+            drive_client.creds = None
+            drive_client.service = None
 
         print("✅ Logged out successfully")
         return {"message": "Logged out successfully"}
@@ -270,7 +271,7 @@ async def get_all_tags():
     }
 
 
-# For local development
+# For local development (do not run on import)
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting Knowledge Hub Backend...")
@@ -279,13 +280,3 @@ if __name__ == "__main__":
     print(f"Frontend URL: {FRONTEND_URL}")
     print("=" * 60)
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
-
-# ✅ Vercel serverless handler - THIS IS CRITICAL
-try:
-    from mangum import Mangum  # optional, for AWS Lambda compatibility
-    aws_handler = Mangum(app, lifespan="off")
-except Exception:
-    aws_handler = None
-
-# ✅ Vercel ASGI entrypoint (must be at module level)
-handler = app
