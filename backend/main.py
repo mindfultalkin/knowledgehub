@@ -286,3 +286,6 @@ try:
     aws_handler = Mangum(app, lifespan="off")  # name it aws_handler (not `handler`)
 except Exception:
     aws_handler = None
+
+    # ✅ Vercel entrypoint
+handler = app
