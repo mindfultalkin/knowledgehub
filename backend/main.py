@@ -3,7 +3,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from typing import Optional
-from mangum import Mangum
 import os
 import sys
 
@@ -271,7 +270,6 @@ async def get_all_tags():
         "contentTags": list(tagger.CONTENT_KEYWORDS.keys())
     }
 
-handler = Mangum(app, lifespan="off")
 
 
 # For local development (do not run on import)
@@ -283,3 +281,5 @@ if __name__ == "__main__":
     print(f"Frontend URL: {FRONTEND_URL}")
     print("=" * 60)
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
+
+app = app
