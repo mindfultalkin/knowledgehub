@@ -225,4 +225,4 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host=config.BACKEND_HOST, port=config.BACKEND_PORT, log_level="info", reload=True)
 
 # ✅ For Vercel serverless detection
-app = app
+handler = app
