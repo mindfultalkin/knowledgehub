@@ -282,10 +282,10 @@ if __name__ == "__main__":
 
 # ✅ Vercel serverless handler - THIS IS CRITICAL
 try:
-    from mangum import Mangum  # optional, keep for AWS Lambda usage only
-    aws_handler = Mangum(app, lifespan="off")  # name it aws_handler (not `handler`)
+    from mangum import Mangum  # optional, for AWS Lambda compatibility
+    aws_handler = Mangum(app, lifespan="off")
 except Exception:
     aws_handler = None
 
-    # ✅ Vercel entrypoint
+# ✅ Vercel ASGI entrypoint (must be at module level)
 handler = app
