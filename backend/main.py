@@ -1,4 +1,3 @@
-# backend/main.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -93,6 +92,16 @@ async def health():
         "GOOGLE_CLIENT_ID_loaded": bool(os.getenv("GOOGLE_CLIENT_ID")),
         "drive_client_available": drive_client is not None,
         "tagger_available": tagger is not None
+    }
+
+
+@app.get("/api/health")
+async def api_health():
+    """API health check endpoint"""
+    return {
+        "status": "healthy", 
+        "service": "knowledge-hub-api",
+        "environment": os.getenv("VERCEL_ENV", "local")
     }
 
 
@@ -271,7 +280,6 @@ async def get_all_tags():
     }
 
 
-
 # For local development (do not run on import)
 if __name__ == "__main__":
     import uvicorn
@@ -281,5 +289,3 @@ if __name__ == "__main__":
     print(f"Frontend URL: {FRONTEND_URL}")
     print("=" * 60)
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
-
-app = app
