@@ -12,15 +12,15 @@
   ],
   "routes": [
     {
-      "src": "^/api/(.*)",
+      "src": "/api/(.*)",
       "dest": "backend/main.py"
     },
     {
-      "src": "^/(.*\\.(?:js|css|png|jpg|jpeg|svg|ico|json))$",
+      "src": "/(.*\\.(?:js|css|png|jpg|jpeg|svg|ico|json))$",
       "dest": "/frontend/$1"
     },
     {
-      "src": "^/(.*)$",
+      "src": "/(.*)",
       "dest": "/frontend/index.html"
     }
   ]
