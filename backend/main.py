@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from typing import Optional
+from mangum import Mangum
 import os
 import sys
 
@@ -280,3 +281,5 @@ if __name__ == "__main__":
     print(f"Frontend URL: {FRONTEND_URL}")
     print("=" * 60)
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
+
+handler = Mangum(app)
