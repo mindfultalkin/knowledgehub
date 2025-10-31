@@ -281,5 +281,8 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
 
 # ✅ Vercel serverless handler - THIS IS CRITICAL
-from mangum import Mangum
-handler = Mangum(app, lifespan="off")
+try:
+    from mangum import Mangum  # optional, keep for AWS Lambda usage only
+    aws_handler = Mangum(app, lifespan="off")  # name it aws_handler (not `handler`)
+except Exception:
+    aws_handler = None
