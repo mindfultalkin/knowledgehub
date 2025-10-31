@@ -20,7 +20,7 @@ if os.getenv("VERCEL_ENV") != "production":
 # ----------------------------------------------------
 # App Initialization
 # ----------------------------------------------------
-app = FastAPI(title="Knowledge Hub Backend", version="1.0.0", root_path="/api")
+app = FastAPI(title="Knowledge Hub Backend", version="1.0.0")
 
 # CORS Setup
 app.add_middleware(
