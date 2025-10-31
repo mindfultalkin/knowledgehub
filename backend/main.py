@@ -13,7 +13,7 @@ if backend_dir not in sys.path:
 # Import modules - these should now work
 try:
     from config import (
-        ALLOWED_ORIGINS, SERVICE_API_BASE_URL, 
+        ALLOWED_ORIGINS, SERVICE_API_BASE_URL,
         FRONTEND_URL, BACKEND_HOST, BACKEND_PORT
     )
     from google_drive import GoogleDriveClient
@@ -281,4 +281,5 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info", reload=True)
 
 # ✅ Vercel serverless handler - THIS IS CRITICAL
-handler = app
+from mangum import Mangum
+handler = Mangum(app, lifespan="off")
