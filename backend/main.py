@@ -44,7 +44,6 @@ if os.getenv("VERCEL_ENV") != "production":
 # ----------------------------------------------------
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "message": "Knowledge Hub Backend API",
         "version": "1.0.0",
@@ -57,27 +56,12 @@ async def root():
 
 @app.get("/health")
 async def health():
+    """Health check endpoint"""
     return {
         "status": "healthy",
-        "environment": os.getenv("VERCEL_ENV", "local"),
-        "authenticated": drive_client.creds is not None
+        "env": os.getenv("VERCEL_ENV", "local"),
+        "GOOGLE_CLIENT_ID_loaded": bool(os.getenv("GOOGLE_CLIENT_ID")),
     }
-# @app.get("/health")
-# async def health():
-#     # Debug information for verifying environment variables
-#     debug_env = {
-#         "VERCEL_ENV": os.getenv("VERCEL_ENV"),
-#         "GOOGLE_CLIENT_ID": bool(os.getenv("GOOGLE_CLIENT_ID")),
-#         "GOOGLE_CLIENT_SECRET": bool(os.getenv("GOOGLE_CLIENT_SECRET")),
-#         "SERVICE_API_BASE_URL": os.getenv("SERVICE_API_BASE_URL"),
-#         "FRONTEND_URL": os.getenv("FRONTEND_URL"),
-#     }
-
-#     return {
-#         "status": "healthy" if all(debug_env.values()) else "env_missing",
-#         "env_check": debug_env,
-#     }
-
 
 @app.get("/auth/google")
 async def google_auth():
@@ -233,14 +217,12 @@ async def get_all_tags():
 # For local development
 if __name__ == "__main__":
     import uvicorn
-
     print("🚀 Starting Knowledge Hub Backend...")
-    print(f"📁 Using .env file: {os.path.join(os.path.dirname(__file__), '.env')}")
-    print(f"🌐 API Base URL: {config.SERVICE_API_BASE_URL}")
-    print(f"💻 Frontend URL: {config.FRONTEND_URL}")
+    print(f"Environment: {os.getenv('VERCEL_ENV', 'local')}")
+    print(f"API Base URL: {config.SERVICE_API_BASE_URL}")
+    print(f"Frontend URL: {config.FRONTEND_URL}")
     print("=" * 60)
-
     uvicorn.run("main:app", host=config.BACKEND_HOST, port=config.BACKEND_PORT, log_level="info", reload=True)
 
-# For Vercel serverless (IMPORTANT: This must be present)
-handler = app
+# ✅ For Vercel serverless detection
+app = app
