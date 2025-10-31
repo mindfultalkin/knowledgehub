@@ -12,6 +12,14 @@
   ],
   "routes": [
     {
+      "src": "/api/health",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/api/auth/.*",
+      "dest": "backend/main.py"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "backend/main.py"
     },
