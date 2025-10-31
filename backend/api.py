@@ -121,7 +121,7 @@ async def auth_status():
 
     return {"authenticated": is_authenticated, "user": user_info}
 
-@app.get("/drive/files")
+@router.get("/drive/files")
 async def get_files(page_size: int = 50, page_token: Optional[str] = None, query: Optional[str] = None):
     """List files from Google Drive"""
     if not drive_client or not tagger:
@@ -159,7 +159,7 @@ async def get_files(page_size: int = 50, page_token: Optional[str] = None, query
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/drive/files/{file_id}")
+@router.get("/drive/files/{file_id}")
 async def get_file(file_id: str):
     """Get specific file details"""
     if not drive_client or not tagger:
@@ -177,7 +177,7 @@ async def get_file(file_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/drive/connection-status")
+@router.get("/drive/connection-status")
 async def connection_status():
     """Get Google Drive connection status"""
     if not drive_client:
@@ -207,7 +207,7 @@ async def connection_status():
         return {"connected": False, "error": str(e)}
 
 
-@app.get("/tags")
+@router.get("/tags")
 async def get_all_tags():
     """Get all available tags"""
     if not tagger:
