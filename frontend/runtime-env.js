@@ -4,7 +4,7 @@
 // };
 
 window.RUNTIME_ENV = {
-  SERVICE_API_BASE_URL: 'https://knowledgehub-eta.vercel.app/',
+  SERVICE_API_BASE_URL: 'https://knowledgehub-eta.vercel.app/api',
   FRONTEND_URL: 'https://knowledgehub-eta.vercel.app/'
 };
 
