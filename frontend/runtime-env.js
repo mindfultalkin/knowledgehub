@@ -1,5 +1,5 @@
 // window.RUNTIME_ENV = {
-//   SERVICE_API_BASE_URL: 'http://localhost:8000',
+//   SERVICE_API_BASE_URL: 'http://localhost:8000/api',
 //   FRONTEND_URL: 'http://localhost:5500'
 // };
 

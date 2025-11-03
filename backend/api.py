@@ -60,7 +60,7 @@ async def google_auth():
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
-        redirect_uri = f"{SERVICE_API_BASE_URL}/api/oauth2callback"
+        redirect_uri = f"{SERVICE_API_BASE_URL}/oauth2callback"
         auth_url, _ = drive_client.get_authorization_url(redirect_uri)
         return {"auth_url": auth_url}
     except Exception as e:
@@ -73,7 +73,7 @@ async def oauth2callback(code: str):
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
-        redirect_uri = f"{SERVICE_API_BASE_URL}/api/oauth2callback"
+        redirect_uri = f"{SERVICE_API_BASE_URL}/oauth2callback"
         drive_client.exchange_code_for_credentials(code, redirect_uri)
         return RedirectResponse(url=f"{FRONTEND_URL}?auth=success")
     except Exception as e:
@@ -214,6 +214,6 @@ async def get_all_tags():
         raise HTTPException(status_code=500, detail="Tagger not initialized")
     
     return {
-        "categories": list(tagger.CATEGORIES.keys()), 
+        "categories": list(tagger.CATEGORIES.keys()),
         "contentTags": list(tagger.CONTENT_KEYWORDS.keys())
     }
