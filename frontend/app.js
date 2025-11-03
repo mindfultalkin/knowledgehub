@@ -3,6 +3,7 @@
 const API_BASE_URL = window.RUNTIME_ENV?.SERVICE_API_BASE_URL;
 console.log('API_BASE_URL:', API_BASE_URL);
 // Application State
+// Application State
 const appState = {
   currentView: 'dashboard',
   authenticated: false,
@@ -16,8 +17,19 @@ const appState = {
   loading: false,
   theme: localStorage.getItem('theme') || 'light',
   gridSize: localStorage.getItem('gridSize') || 'medium',
-  filesPerPage: parseInt(localStorage.getItem('filesPerPage')) || 24
+  filesPerPage: parseInt(localStorage.getItem('filesPerPage')) || 24,
+  
+  // ADD THESE 3 LINES - Keep your existing nlp properties if any
+  nlpSearchResults: [],
+  nlpSearchQuery: '',
+  nlpSearchLoading: false,
+  
+  // NEW PROPERTIES FOR DUAL SEARCH
+  searchType: 'simple', // 'simple' or 'ai'
+  searchResults: []
 };
+
+
 
 // Apply theme on load
 document.documentElement.setAttribute('data-theme', appState.theme);
@@ -165,6 +177,109 @@ function changeFilesPerPage(count) {
   appState.filesPerPage = parseInt(count);
   localStorage.setItem('filesPerPage', count);
   renderCurrentView();
+}
+// ADD THESE NEW FUNCTIONS FOR NLP SEARCH
+
+async function performNLPSearch(query) {
+  if (!query.trim()) return;
+  
+  appState.nlpSearchLoading = true;
+  appState.nlpSearchQuery = query;
+  renderCurrentView();
+  
+  try {
+    // Add min_score parameter to only get high-relevance results
+    const response = await fetch(`${API_BASE_URL}/nlp/search?query=${encodeURIComponent(query)}&top_k=10&min_score=0.4`);
+    if (!response.ok) {
+      throw new Error('NLP search failed');
+    }
+    
+    const data = await response.json();
+    appState.nlpSearchResults = data.results || [];
+    appState.nlpSearchLoading = false;
+    
+    // Show message based on results
+    if (appState.nlpSearchResults.length > 0) {
+      showNotification(`🔍 Found ${data.total_results} highly relevant documents`, 'success');
+    } else {
+      showNotification('🔍 No highly relevant documents found. Try different search terms.', 'info');
+    }
+    
+    renderCurrentView();
+    
+  } catch (error) {
+    console.error('NLP search failed:', error);
+    appState.nlpSearchLoading = false;
+    showNotification('❌ NLP search failed.', 'error');
+  }
+}
+
+async function trainNLPModel() {
+  try {
+    showNotification('🤖 Training NLP model on your documents...', 'info');
+    
+    const response = await fetch(`${API_BASE_URL}/nlp/train`, {
+      method: 'POST'
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showNotification(`✅ ${data.message} (${data.documents_processed} documents)`, 'success');
+    } else {
+      throw new Error(data.detail || 'Training failed');
+    }
+    
+  } catch (error) {
+    console.error('Training failed:', error);
+    showNotification('❌ NLP training failed. Please try again.', 'error');
+  }
+}
+
+function getRelevanceColor(relevance) {
+  const colors = {
+    'Very High': '#4caf50',
+    'High': '#8bc34a',
+    'Medium': '#ff9800',
+    'Low': '#ff5722',
+    'Very Low': '#f44336'
+  };
+  return colors[relevance] || '#666';
+}
+
+function renderNLPSearchResult(file) {
+  const icon = `<div style="font-size:3.5rem;">${getFileIcon(file.mimeType, file.name)}</div>`;
+  
+  return `
+    <div class="file-card" onclick='viewFile(${JSON.stringify(file).replace(/'/g, "&apos;")})'>
+      <div class="file-thumbnail" style="position: relative;">
+        ${icon}
+        <div style="position: absolute; top: 8px; right: 8px; background: ${getRelevanceColor(file.relevance)}; 
+             color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">
+          ${file.relevance}
+        </div>
+      </div>
+      <div class="file-info">
+        <div class="file-name" title="${file.name}">${file.name}</div>
+        <div class="file-meta">
+          <span>👤 ${file.owner}</span>
+          <span>📅 ${formatDate(file.modifiedTime)}</span>
+          <span>💾 ${formatFileSize(file.size)}</span>
+        </div>
+        <div style="margin: 8px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
+          ${file.snippet || 'No content preview available'}
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+          <span style="font-size: 0.75rem; color: var(--primary-color); font-weight: 600;">
+            Match: ${(file.score * 100).toFixed(1)}%
+          </span>
+          <span style="font-size: 0.7rem; color: var(--text-secondary);">
+            AI Search
+          </span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // API Functions
@@ -458,8 +573,8 @@ function renderSearch() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">🔍 Search Your Drive</h1>
-        <p class="view-subtitle">Find files quickly</p>
+        <h1 class="view-title">🔍 Search Your Documents</h1>
+        <p class="view-subtitle">Choose your search method</p>
       </div>
       
       ${!appState.authenticated ? `
@@ -469,56 +584,83 @@ function renderSearch() {
         </div>
       ` : `
         <div class="search-section">
+          <!-- Search Bar -->
           <div class="search-bar">
             <input 
               type="text" 
               class="search-input" 
-              placeholder="Search files by name..."
+              placeholder="Enter your search query..."
               oninput="handleSearch(event)"
               value="${appState.searchQuery}"
+              onkeypress="if(event.key === 'Enter') performSearch()"
             >
             <button class="search-button" onclick="performSearch()">Search</button>
           </div>
           
-          <div class="filters-container">
-            <div class="filter-group">
-              <label class="filter-label">File Type</label>
-              <select class="filter-select" onchange="handleFileTypeFilter(event)">
-                <option value="all">All Types</option>
-                <option value="document">Documents</option>
-                <option value="image">Images</option>
-                <option value="video">Videos</option>
-                <option value="audio">Audio</option>
-              </select>
-            </div>
-            
-            <div class="filter-group">
-              <label class="filter-label">Sort By</label>
-              <select class="filter-select" onchange="handleSortChange(event)">
-                <option value="modifiedTime">Date Modified</option>
-                <option value="name">Name</option>
-                <option value="size">Size</option>
-              </select>
-            </div>
+          <!-- Search Type Selection -->
+          <div style="display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap;">
+            <button class="search-type-button ${appState.searchType === 'simple' ? 'active' : ''}" 
+                    onclick="setSearchType('simple')">
+              🔍 Exact Match
+            </button>
+            <button class="search-type-button ${appState.searchType === 'ai' ? 'active' : ''}" 
+                    onclick="setSearchType('ai')">
+              🤖 AI Semantic
+            </button>
+            <button class="action-button" onclick="trainNLPModel()" 
+                    style="margin-left: auto; background: linear-gradient(135deg, #667eea, #764ba2);">
+              🚀 Train AI Model
+            </button>
           </div>
+          
+          <!-- Search Description -->
+          <div style="margin: 12px 0; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
+            <strong>${appState.searchType === 'simple' ? '🔍 Exact Match Search:' : '🤖 AI Semantic Search:'}</strong>
+            <span style="color: var(--text-secondary);">
+              ${appState.searchType === 'simple' 
+                ? 'Finds documents containing ALL your exact words' 
+                : 'Understands meaning and finds conceptually similar documents'}
+            </span>
+          </div>
+          
+          ${appState.searchType === 'ai' ? `
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+              <button class="suggestion-tag" onclick="searchWithAI('rental agreement')">🏠 Rental Agreement</button>
+              <button class="suggestion-tag" onclick="searchWithAI('employment contract')">👔 Employment Contract</button>
+              <button class="suggestion-tag" onclick="searchWithAI('payment terms')">💰 Payment Terms</button>
+              <button class="suggestion-tag" onclick="searchWithAI('confidentiality clause')">🔒 Confidentiality</button>
+            </div>
+          ` : ''}
         </div>
         
+        <!-- Search Results -->
         <div style="margin: 24px 0;">
-          <h2 class="view-title">Results (${appState.filteredFiles.length})</h2>
+          <h2 class="view-title">
+            ${appState.searchType === 'simple' ? '🔍' : '🤖'} 
+            ${appState.searchType === 'simple' ? 'Exact Match' : 'AI Semantic'} 
+            Results for "${appState.searchQuery}"
+            ${appState.searchResults.length ? `(${appState.searchResults.length} found)` : ''}
+          </h2>
+          
+          ${appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : 
+            appState.searchResults.length > 0 ? `
+              <div class="files-grid">
+                ${appState.searchResults.map(file => 
+                  appState.searchType === 'simple' 
+                    ? renderSimpleSearchResult(file) 
+                    : renderAISearchResult(file)
+                ).join('')}
+              </div>
+            ` : appState.searchQuery ? `
+              <div class="empty-state">
+                <div class="empty-state-icon">${appState.searchType === 'simple' ? '🔍' : '🤖'}</div>
+                <h3>No documents found</h3>
+                <p>${appState.searchType === 'simple' 
+                  ? `No documents contain all the words: "${appState.searchQuery}"` 
+                  : 'Try different search terms or train the AI model'}</p>
+              </div>
+            ` : ''}
         </div>
-        
-        ${appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : 
-          appState.filteredFiles.length > 0 ? `
-            <div class="files-grid">
-              ${appState.filteredFiles.slice(0, appState.filesPerPage).map(file => renderFileCard(file)).join('')}
-            </div>
-          ` : `
-            <div class="empty-state">
-              <div class="empty-state-icon">🔍</div>
-              <h3>No files found</h3>
-              <p>Try adjusting your search criteria</p>
-            </div>
-          `}
       `}
     </div>
   `;
@@ -834,6 +976,151 @@ function renderCurrentView() {
   }
   
   mainContent.innerHTML = content;
+}
+// ==================== ADD THESE NEW FUNCTIONS ====================
+
+// Search type selector
+function setSearchType(type) {
+  appState.searchType = type;
+  if (appState.searchQuery) {
+    performSearch();
+  }
+  renderCurrentView();
+}
+
+// Main search function
+async function performSearch() {
+  const query = appState.searchQuery.trim();
+  if (!query) return;
+  
+  appState.loading = true;
+  renderCurrentView();
+  
+  try {
+    const endpoint = appState.searchType === 'simple' ? '/search/simple' : '/search/ai';
+    const response = await fetch(`${API_BASE_URL}${endpoint}?query=${encodeURIComponent(query)}`);
+    
+    if (!response.ok) throw new Error('Search failed');
+    
+    const data = await response.json();
+    appState.searchResults = data.results || [];
+    appState.loading = false;
+    
+    const message = appState.searchType === 'simple' 
+      ? `✅ Found ${data.total_results} documents containing "${query}"`
+      : `🤖 Found ${data.total_results} semantically similar documents`;
+    
+    showNotification(message, 'success');
+    renderCurrentView();
+    
+  } catch (error) {
+    console.error('Search failed:', error);
+    appState.loading = false;
+    showNotification('❌ Search failed', 'error');
+  }
+}
+
+// AI search with specific query
+function searchWithAI(query) {
+  appState.searchQuery = query;
+  appState.searchType = 'ai';
+  performSearch();
+}
+
+// Different result renderers
+function renderSimpleSearchResult(file) {
+  const icon = `<div style="font-size:3.5rem;">${getFileIcon(file.mimeType, file.name)}</div>`;
+  
+  return `
+    <div class="file-card" onclick='viewFile(${JSON.stringify(file).replace(/'/g, "&apos;")})'>
+      <div class="file-thumbnail">
+        ${icon}
+        <div style="position: absolute; top: 8px; right: 8px; background: #4caf50; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.7rem;">
+          🔍 Exact Match
+        </div>
+      </div>
+      <div class="file-info">
+        <div class="file-name" title="${file.name}">${file.name}</div>
+        <div class="file-meta">
+          <span>👤 ${file.owner}</span>
+          <span>📅 ${formatDate(file.modifiedTime)}</span>
+        </div>
+        ${file.content_preview ? `
+          <div style="margin: 8px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; background: var(--bg-tertiary); padding: 8px; border-radius: 4px;">
+            ${file.content_preview}
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderAISearchResult(file) {
+  const icon = `<div style="font-size:3.5rem;">${getFileIcon(file.mimeType, file.name)}</div>`;
+  const relevanceColor = getRelevanceColor(file.relevance);
+  
+  return `
+    <div class="file-card" onclick='viewFile(${JSON.stringify(file).replace(/'/g, "&apos;")})'>
+      <div class="file-thumbnail" style="position: relative;">
+        ${icon}
+        <div style="position: absolute; top: 8px; right: 8px; background: ${relevanceColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">
+          ${file.relevance}
+        </div>
+      </div>
+      <div class="file-info">
+        <div class="file-name" title="${file.name}">${file.name}</div>
+        <div class="file-meta">
+          <span>👤 ${file.owner}</span>
+          <span>📅 ${formatDate(file.modifiedTime)}</span>
+        </div>
+        <div style="margin: 8px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
+          ${file.snippet || 'No content preview'}
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+          <span style="font-size: 0.75rem; color: var(--primary-color); font-weight: 600;">
+            Match: ${(file.score * 100).toFixed(1)}%
+          </span>
+          <span style="font-size: 0.7rem; color: var(--text-secondary);">
+            AI Search
+          </span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Add CSS for search type buttons
+const searchStyle = document.createElement('style');
+searchStyle.textContent = `
+  .search-type-button {
+    padding: 10px 20px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+  }
+  
+  .search-type-button.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-dark);
+  }
+  
+  .search-type-button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+`;
+document.head.appendChild(searchStyle);
+
+// ==================== END OF NEW FUNCTIONS ====================
+
+// KEEP YOUR EXISTING initApp() function below - DON'T REMOVE IT
+async function initApp() {
+  // ... your existing initApp code ...
 }
 
 // Initialize Application

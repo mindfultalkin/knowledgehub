@@ -54,6 +54,22 @@ GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
 GOOGLE_TOKEN_EXPIRY = os.getenv("GOOGLE_TOKEN_EXPIRY", "")
 
 # ----------------------------------------------------
+# NLP Search Configuration
+# ----------------------------------------------------
+NLP_MODEL_PATH = os.getenv("NLP_MODEL_PATH", "models/nlp_search_model.pkl")
+INDEX_PATH = os.getenv("INDEX_PATH", "models/faiss_index")
+EMBEDDINGS_PATH = os.getenv("EMBEDDINGS_PATH", "models/embeddings.npy")
+
+# ----------------------------------------------------
+# Model Storage Directory - ADDED FOR NLP
+# ----------------------------------------------------
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+
+# Create models directory if it doesn't exist
+if not os.path.exists(MODELS_DIR):
+    os.makedirs(MODELS_DIR)
+
+# ----------------------------------------------------
 # Validation
 # ----------------------------------------------------
 if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
