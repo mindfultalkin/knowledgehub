@@ -1,17 +1,23 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 from typing import Optional
+from sqlalchemy.orm import Session
 import os
 
-from config import (
-    ALLOWED_ORIGINS, SERVICE_API_BASE_URL,
-    FRONTEND_URL, BACKEND_HOST, BACKEND_PORT, MODELS_DIR
-)
+# Import config FIRST
+import config
+
+# Then import database
+from database import get_db
+
+# Then import other modules
 from google_drive import GoogleDriveClient
 from tagging import SimpleTagger
 from nlp_search import NLPSearchEngine
 from document_processor import DocumentProcessor
 from simple_search import SimpleTextSearch
+from services.drive_ingestion import DriveIngestionService
+from models import Document
 
 # Only import dotenv in non-production
 if os.getenv("VERCEL_ENV") != "production":
@@ -20,8 +26,10 @@ if os.getenv("VERCEL_ENV") != "production":
     except ImportError:
         set_key = None
 
+
 # Initialize router
 router = APIRouter()
+
 
 # Initialize ALL clients - CRITICAL FIX
 try:
@@ -44,6 +52,7 @@ except Exception as e:
     nlp_engine = None
     simple_searcher = None
 
+
 # Helper function for content preview
 def get_content_preview(content: str, query: str, preview_length: int = 200) -> str:
     """Get content preview for simple search"""
@@ -62,7 +71,9 @@ def get_content_preview(content: str, query: str, preview_length: int = 200) -> 
     
     return content[:preview_length] + '...' if len(content) > preview_length else content
 
+
 # ==================== BASIC ROUTES ====================
+
 
 @router.get("/")
 async def root():
@@ -71,10 +82,12 @@ async def root():
         "version": "1.0.0",
         "authenticated": drive_client.creds is not None if drive_client else False,
         "environment": os.getenv("VERCEL_ENV", "local"),
-        "api_base_url": SERVICE_API_BASE_URL,
-        "frontend_url": FRONTEND_URL,
+        "api_base_url": config.SERVICE_API_BASE_URL,
+        "frontend_url": config.FRONTEND_URL,
+        "redirect_uri": config.GOOGLE_REDIRECT_URI,
         "status": "running"
     }
+
 
 @router.get("/health")
 async def health():
@@ -86,8 +99,117 @@ async def health():
         "tagger_available": tagger is not None,
         "nlp_engine_available": nlp_engine is not None,
         "simple_searcher_available": simple_searcher is not None,
-        "doc_processor_available": doc_processor is not None
+        "doc_processor_available": doc_processor is not None,
+        "redirect_uri": config.GOOGLE_REDIRECT_URI
     }
+
+
+# ==================== DATABASE ROUTES ====================
+
+
+@router.get("/db/health")
+async def db_health_check(db: Session = Depends(get_db)):
+    """
+    Check database health and statistics
+    """
+    try:
+        # Count documents
+        doc_count = db.query(Document).count()
+        
+        return {
+            "database_connected": True,
+            "database_name": config.MYSQL_DATABASE,
+            "database_host": config.MYSQL_HOST,
+            "total_documents": doc_count,
+            "status": "healthy"
+        }
+    except Exception as e:
+        return {
+            "database_connected": False,
+            "error": str(e),
+            "status": "unhealthy"
+        }
+
+
+# ==================== GOOGLE DRIVE SYNC ROUTES ====================
+
+
+@router.post("/sync/drive/full")
+async def sync_drive_full(db: Session = Depends(get_db)):
+    """
+    Full sync of Google Drive files to database
+    """
+    if not drive_client or not drive_client.creds:
+        raise HTTPException(status_code=401, detail="Not authenticated with Google Drive")
+    
+    try:
+        # Create ingestion service
+        ingestion_service = DriveIngestionService(drive_client, db)
+        
+        # Start sync
+        stats = ingestion_service.sync_all_files()
+        
+        return {
+            "message": "Sync completed",
+            "stats": stats
+        }
+    except Exception as e:
+        import traceback
+        print(f"❌ Sync error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+@router.get("/sync/status")
+async def get_sync_status(db: Session = Depends(get_db)):
+    """
+    Get sync status and statistics
+    """
+    try:
+        ingestion_service = DriveIngestionService(drive_client, db)
+        stats = ingestion_service.get_sync_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/documents")
+async def get_all_documents(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all documents from database with pagination
+    """
+    try:
+        documents = db.query(Document).offset(skip).limit(limit).all()
+        total = db.query(Document).count()
+        
+        return {
+            "documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "mime_type": doc.mime_type,
+                    "size_bytes": doc.size_bytes,
+                    "owner_name": doc.owner_name,
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                    "modified_at": doc.modified_at.isoformat() if doc.modified_at else None,
+                    "file_url": doc.file_url,
+                    "status": doc.status
+                }
+                for doc in documents
+            ],
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== GOOGLE AUTH ROUTES ====================
+
 
 @router.get("/auth/google")
 async def google_auth():
@@ -95,12 +217,13 @@ async def google_auth():
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
-        redirect_uri = f"{SERVICE_API_BASE_URL}/oauth2callback"
-        auth_url, _ = drive_client.get_authorization_url(redirect_uri)
+        print(f"🔗 Generating auth URL with redirect URI: {config.GOOGLE_REDIRECT_URI}")
+        auth_url, state = drive_client.get_authorization_url(config.GOOGLE_REDIRECT_URI)
         return {"auth_url": auth_url}
     except Exception as e:
         print(f"❌ Error in google_auth: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/oauth2callback")
 async def oauth2callback(code: str):
@@ -108,12 +231,13 @@ async def oauth2callback(code: str):
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
-        redirect_uri = f"{SERVICE_API_BASE_URL}/oauth2callback"
-        drive_client.exchange_code_for_credentials(code, redirect_uri)
-        return RedirectResponse(url=f"{FRONTEND_URL}?auth=success")
+        print(f"🔗 Exchanging code with redirect URI: {config.GOOGLE_REDIRECT_URI}")
+        drive_client.exchange_code_for_credentials(code, config.GOOGLE_REDIRECT_URI)
+        return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=success")
     except Exception as e:
         print(f"❌ Error in oauth2callback: {e}")
-        return RedirectResponse(url=f"{FRONTEND_URL}?auth=error&message={str(e)}")
+        return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=error&message={str(e)}")
+
 
 @router.post("/auth/logout")
 async def logout():
@@ -136,6 +260,7 @@ async def logout():
         print(f"❌ Error during logout: {e}")
         return {"message": "Logout completed (with minor issues)"}
 
+
 @router.get("/auth/status")
 async def auth_status():
     if not drive_client:
@@ -155,6 +280,10 @@ async def auth_status():
             print(f"Error getting user info: {e}")
 
     return {"authenticated": is_authenticated, "user": user_info}
+
+
+# ==================== LEGACY DRIVE ROUTES ====================
+
 
 @router.get("/drive/files")
 async def get_files(page_size: int = 50, page_token: Optional[str] = None, query: Optional[str] = None):
@@ -193,6 +322,7 @@ async def get_files(page_size: int = 50, page_token: Optional[str] = None, query
         print(f"❌ Error getting files: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/drive/files/{file_id}")
 async def get_file(file_id: str):
     """Get specific file details"""
@@ -209,6 +339,7 @@ async def get_file(file_id: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/drive/connection-status")
 async def connection_status():
@@ -239,6 +370,7 @@ async def connection_status():
     except Exception as e:
         return {"connected": False, "error": str(e)}
 
+
 @router.get("/tags")
 async def get_all_tags():
     """Get all available tags"""
@@ -250,7 +382,9 @@ async def get_all_tags():
         "contentTags": list(tagger.CONTENT_KEYWORDS.keys())
     }
 
+
 # ==================== NLP ROUTES ====================
+
 
 @router.post("/nlp/train")
 async def train_nlp_model():
@@ -291,7 +425,7 @@ async def train_nlp_model():
         nlp_engine.create_embeddings(documents)
         
         # Save model
-        model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
+        model_path = os.path.join(config.MODELS_DIR, "nlp_search_model.pkl")
         nlp_engine.save_model(model_path)
         
         print("🎉 NLP training completed successfully!")
@@ -309,6 +443,7 @@ async def train_nlp_model():
         print(f"📋 Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
 
+
 @router.get("/nlp/search")
 async def nlp_search(query: str, top_k: int = 10):
     """Search using NLP semantic search"""
@@ -321,7 +456,7 @@ async def nlp_search(query: str, top_k: int = 10):
         
         if not nlp_engine.is_trained:
             # Try to load existing model
-            model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
+            model_path = os.path.join(config.MODELS_DIR, "nlp_search_model.pkl")
             if os.path.exists(model_path):
                 nlp_engine.load_model(model_path)
             else:
@@ -356,6 +491,7 @@ async def nlp_search(query: str, top_k: int = 10):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
+
 @router.get("/nlp/status")
 async def nlp_status():
     """Get NLP model status"""
@@ -368,7 +504,9 @@ async def nlp_status():
         "model_ready": nlp_engine.is_trained
     }
 
+
 # ==================== SIMPLE SEARCH ROUTES ====================
+
 
 @router.get("/search/simple")
 async def simple_text_search(query: str):
@@ -408,6 +546,7 @@ async def simple_text_search(query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Simple search failed: {str(e)}")
 
+
 @router.get("/search/ai")
 async def ai_semantic_search(query: str, top_k: int = 10):
     """AI semantic search (your existing NLP search)"""
@@ -419,7 +558,7 @@ async def ai_semantic_search(query: str, top_k: int = 10):
             raise HTTPException(status_code=500, detail="NLP engine not initialized")
         
         if not nlp_engine.is_trained:
-            model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
+            model_path = os.path.join(config.MODELS_DIR, "nlp_search_model.pkl")
             if os.path.exists(model_path):
                 nlp_engine.load_model(model_path)
             else:
@@ -454,7 +593,9 @@ async def ai_semantic_search(query: str, top_k: int = 10):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI search failed: {str(e)}")
 
+
 # ==================== DEBUG ROUTES ====================
+
 
 @router.get("/debug/simple-search")
 async def debug_simple_search():
@@ -466,4 +607,16 @@ async def debug_simple_search():
         "simple_search_loaded": simple_searcher.is_loaded,
         "documents_loaded": len(simple_searcher.documents),
         "drive_connected": drive_client.creds is not None if drive_client else False
+    }
+
+
+@router.get("/debug/oauth-config")
+async def debug_oauth_config():
+    """Debug OAuth configuration"""
+    return {
+        "environment": os.getenv("VERCEL_ENV", "local"),
+        "redirect_uri": config.GOOGLE_REDIRECT_URI,
+        "api_base_url": config.SERVICE_API_BASE_URL,
+        "frontend_url": config.FRONTEND_URL,
+        "drive_authenticated": drive_client.creds is not None if drive_client else False
     }

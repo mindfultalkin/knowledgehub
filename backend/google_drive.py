@@ -30,17 +30,18 @@ class GoogleDriveClient:
                 "auth_uri": config.GOOGLE_AUTH_URI,
                 "token_uri": config.GOOGLE_TOKEN_URI,
                 "auth_provider_x509_cert_url": config.GOOGLE_AUTH_PROVIDER_CERT_URL,
-                "redirect_uris": config.GOOGLE_REDIRECT_URIS
+                "redirect_uris": [config.GOOGLE_REDIRECT_URI]  # Use single consistent redirect URI
             }
         }
         
     def get_authorization_url(self, redirect_uri):
         """Get OAuth authorization URL"""
         try:
+            # Use the consistent redirect URI from config
             flow = Flow.from_client_config(
                 self.client_config,
                 scopes=self.scopes,
-                redirect_uri=redirect_uri
+                redirect_uri=config.GOOGLE_REDIRECT_URI  # Always use config redirect URI
             )
             
             # Generate authorization URL with proper parameters
@@ -51,7 +52,8 @@ class GoogleDriveClient:
             )
             
             print(f"✅ Authorization URL generated successfully")
-            return authorization_url, flow
+            print(f"🔗 Using redirect URI: {config.GOOGLE_REDIRECT_URI}")
+            return authorization_url, state
             
         except Exception as e:
             print(f"❌ Error creating authorization URL: {str(e)}")
@@ -60,10 +62,11 @@ class GoogleDriveClient:
     def exchange_code_for_credentials(self, code, redirect_uri):
         """Exchange authorization code for credentials"""
         try:
+            # Use the consistent redirect URI from config
             flow = Flow.from_client_config(
                 self.client_config,
                 scopes=self.scopes,
-                redirect_uri=redirect_uri
+                redirect_uri=config.GOOGLE_REDIRECT_URI  # Always use config redirect URI
             )
             
             # Fetch the token using the authorization code
@@ -75,6 +78,7 @@ class GoogleDriveClient:
             self.build_service()
             
             print("✅ Successfully exchanged code for credentials")
+            print(f"🔗 Used redirect URI: {config.GOOGLE_REDIRECT_URI}")
             return self.creds
             
         except Exception as e:
