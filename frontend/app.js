@@ -251,7 +251,7 @@ function renderNLPSearchResult(file) {
   const icon = `<div style="font-size:3.5rem;">${getFileIcon(file.mimeType, file.name)}</div>`;
   
   return `
-    <div class="file-card" onclick='viewFile(${JSON.stringify(file).replace(/'/g, "&apos;")})'>
+    <div class="file-card" data-file-id="${file.id}" data-file-name="${file.name}" data-file-type="${file.mimeType || file.type}">
       <div class="file-thumbnail" style="position: relative;">
         ${icon}
         <div style="position: absolute; top: 8px; right: 8px; background: ${getRelevanceColor(file.relevance)}; 
@@ -549,7 +549,7 @@ function renderFileCard(file) {
   const allTags = file.aiTags || [];
   
   return `
-    <div class="file-card" onclick='viewFile(${JSON.stringify(file).replace(/'/g, "&apos;")})'>
+    <div class="file-card" data-file-id="${file.id}" data-file-name="${file.name}" data-file-type="${file.mimeType || file.type}">
       <div class="file-thumbnail">${icon}</div>
       <div class="file-info">
         <div class="file-name" title="${file.name}">${file.name}</div>
@@ -565,6 +565,25 @@ function renderFileCard(file) {
     </div>
   `;
 }
+// Add click handlers to all file cards
+document.addEventListener('DOMContentLoaded', function() {
+    attachFileCardListeners();
+});
+
+function attachFileCardListeners() {
+    document.querySelectorAll('.file-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const fileId = this.dataset.fileId;
+            const fileName = this.dataset.fileName;
+            const fileType = this.dataset.fileType;
+            
+            if (fileId) {
+                openDocumentModal(fileId, fileName, fileType);
+            }
+        });
+    });
+}
+
 
 
 
@@ -931,12 +950,20 @@ function searchByTag(tag) {
 }
 
 function viewFile(file) {
-  if (file.webViewLink) {
-    window.open(file.webViewLink, '_blank');
-  } else {
-    alert(`File: ${file.name}\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\nModified: ${formatDate(file.modifiedTime)}\nTags: ${(file.aiTags || []).join(', ')}`);
-  }
+    // Open document modal for clause extraction
+    if (file.id) {
+        openDocumentModal(file.id, file.name, file.mimeType || file.type);
+    } else {
+        // Fallback to opening in new tab if no ID
+        if (file.webViewLink) {
+            window.open(file.webViewLink, '_blank');
+        } else {
+            alert(`File: ${file.name}\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\nModified: ${formatDate(file.modifiedTime)}\nTags: ${file.aiTags.join(', ')}`);
+        }
+    }
 }
+
+
 
 function navigateTo(view) {
   appState.currentView = view;
@@ -976,6 +1003,7 @@ function renderCurrentView() {
   }
   
   mainContent.innerHTML = content;
+  attachFileCardListeners();
 }
 // ==================== ADD THESE NEW FUNCTIONS ====================
 
@@ -1116,6 +1144,702 @@ searchStyle.textContent = `
 `;
 document.head.appendChild(searchStyle);
 
+
+// File Preview Modal
+function viewFile(file) {
+    const fileUrl = file.file_url || file.webViewLink || file.fileUrl;
+    
+    if (fileUrl) {
+        window.open(fileUrl, '_blank');
+        showNotification(`Opening ${file.title || file.name}...`, 'info');
+    } else {
+        showNotification('File URL not available', 'error');
+    }
+}
+// ============================================================
+// CLAUSE EXTRACTION FUNCTIONALITY
+// ============================================================
+
+let currentDocumentId = null;
+let currentClauses = [];
+let selectedClauseNumber = null;
+
+/**
+ * Open document modal and load details
+ */
+
+/**
+ * Open document modal and load details
+ */
+async function openDocumentModal(fileId, fileName, mimeType) {
+    currentDocumentId = fileId;
+    currentDocumentName = fileName;
+
+    // Set modal title
+    document.getElementById('modalTitle').textContent = fileName;
+
+    // Show modal dialog
+    const modal = document.getElementById('documentModal');
+    modal.style.display = 'flex';
+
+    // Clear similar files
+    const similarFilesContent = document.getElementById('similarFilesContent');
+    if (similarFilesContent) {
+        similarFilesContent.innerHTML = '<div class="empty-state">Select a clause to find similar files</div>';
+    }
+
+    // Load clauses
+    await autoLoadCachedClauses(fileId);
+
+    // Tags
+    const tagsContainer = document.getElementById('tagsContainer');
+    if (tagsContainer) {
+        let tags = [];
+        const doc = (window.appState && Array.isArray(appState.files))
+            ? appState.files.find(f => f.id === fileId)
+            : null;
+        if (doc && doc.aiTags && doc.aiTags.length > 0) {
+            tags = doc.aiTags;
+        } else {
+            tags = fileName
+                .replace(/\.[\w\d]+$/, '')
+                .split(/[\s\-_\.]+/)
+                .filter(w => w.length > 2);
+        }
+        tagsContainer.innerHTML = tags.length
+            ? tags.map(tag => `<span class="tag">${tag}</span>`).join(' ')
+            : '<em>No tags</em>';
+    }
+
+    // Set Open in Drive button handler
+    const driveBtn = document.getElementById('driveBtn');
+    if (driveBtn) {
+        driveBtn.onclick = () => window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+    }
+}
+
+
+
+
+
+/**
+ * Update autoLoadCachedClauses to show extract button if no clauses
+ */
+async function autoLoadCachedClauses(fileId) {
+    const clausesList = document.getElementById('clausesList');
+    clausesList.innerHTML = '<div class="loading-state">Loading clauses...</div>';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/documents/${fileId}/cached-clauses`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.clauses && data.clauses.length > 0) {
+                console.log(`✅ Found ${data.clauses.length} cached clauses`);
+                currentClauses = data.clauses;
+                displayClausesList(currentClauses);
+                return;
+            }
+        }
+        
+        // No cached clauses - show extract button
+        clausesList.innerHTML = `
+            <div class="empty-state">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">📄 No clauses extracted yet</p>
+                <button onclick="extractClausesNow()" class="btn-primary" style="padding: 0.75rem 1.5rem; font-size: 0.9rem;">
+                    🔍 Extract Clauses Now
+                </button>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error('Error loading cached clauses:', error);
+        clausesList.innerHTML = `
+            <div class="empty-state">
+                <p style="color: red; margin-bottom: 1rem;">❌ Error loading clauses</p>
+                <button onclick="extractClausesNow()" class="btn-primary">
+                    🔍 Extract Clauses
+                </button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Extract clauses for current document (manual trigger)
+ */
+async function extractClausesNow() {
+    const clausesList = document.getElementById('clausesList');
+    clausesList.innerHTML = '<div class="loading-state">⏳ Extracting clauses... This may take 10-30 seconds...</div>';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/documents/${currentDocumentId}/extract-clauses`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to extract clauses');
+        }
+        
+        console.log(`✅ Extracted ${data.clauses.length} clauses`);
+        currentClauses = data.clauses;
+        displayClausesList(currentClauses);
+        
+        // Show success message
+        showNotification(`✅ Successfully extracted ${data.clauses.length} clauses!`, 'success');
+        
+    } catch (error) {
+        console.error('Error extracting clauses:', error);
+        clausesList.innerHTML = `
+            <div class="empty-state" style="color: red;">
+                <p style="margin-bottom: 1rem;">❌ Failed to extract clauses</p>
+                <p style="font-size: 0.85rem; margin-bottom: 1rem;">${error.message}</p>
+                <button onclick="extractClausesNow()" class="btn-primary">
+                    🔄 Try Again
+                </button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Show notification (if you don't have this function already)
+ */
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196F3'};
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+
+/**
+ * Auto-load cached clauses if they exist
+ */
+/**
+ * Auto-load cached clauses if they exist, otherwise show extract button
+ */
+async function autoLoadCachedClauses(fileId) {
+    const clausesList = document.getElementById('clausesList');
+    clausesList.innerHTML = '<div class="loading-state">Loading clauses...</div>';
+    
+    try {
+        // Try to fetch cached clauses
+        const response = await fetch(`${API_BASE_URL}/documents/${fileId}/cached-clauses`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.clauses && data.clauses.length > 0) {
+                // Clauses found in cache - display them!
+                console.log(`✅ Found ${data.clauses.length} cached clauses`);
+                currentClauses = data.clauses;
+                displayClausesList(currentClauses);
+                return;
+            }
+        }
+        
+        // No cached clauses - show extract button
+        clausesList.innerHTML = `
+            <div class="empty-state" style="text-align: center; padding: 2rem;">
+                <p style="margin-bottom: 1.5rem; color: var(--text-secondary); font-size: 0.95rem;">
+                    📄 No clauses extracted yet
+                </p>
+                <button 
+                    onclick="extractClausesNow()" 
+                    class="btn-primary" 
+                    style="padding: 0.75rem 2rem; font-size: 0.95rem; cursor: pointer;">
+                    🔍 Extract Clauses Now
+                </button>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error('Error loading cached clauses:', error);
+        clausesList.innerHTML = `
+            <div class="empty-state" style="text-align: center; padding: 2rem;">
+                <p style="color: #ff5722; margin-bottom: 1rem;">❌ Error loading clauses</p>
+                <button 
+                    onclick="extractClausesNow()" 
+                    class="btn-primary" 
+                    style="padding: 0.75rem 2rem; cursor: pointer;">
+                    🔍 Extract Clauses
+                </button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * When user selects a clause, find similar files
+ */
+async function selectClause(clauseNumber) {
+    selectedClauseNumber = clauseNumber;
+    
+    // Highlight selected clause
+    document.querySelectorAll('.clause-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    const selectedItem = document.querySelector(`.clause-item[data-clause="${clauseNumber}"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('active');
+    }
+    
+    // Find clause data
+    const clause = currentClauses.find(c => c.clause_number === clauseNumber);
+    
+    if (!clause) {
+        console.error('Clause not found:', clauseNumber);
+        return;
+    }
+    
+    console.log('Selected clause:', clause);
+    
+    // Display clause content in middle panel
+    displaySelectedClause(clause);
+    
+    // Find similar files with this clause title
+    await findSimilarFiles(clause.title); 
+}
+
+/**
+ * Find and display similar files
+ */
+async function findSimilarFiles(clauseTitle) {
+    const container = document.getElementById('similarFilesContent');
+    container.innerHTML = '<div class="loading-state">🔍 Searching for similar files...</div>';
+    
+    console.log('Finding similar files for clause:', clauseTitle);
+    
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/clauses/${encodeURIComponent(clauseTitle)}/similar-files?current_file_id=${currentDocumentId}`
+        );
+        
+        const data = await response.json();
+        
+        console.log('Similar files response:', data);
+        
+        if (!data.found || data.count === 0) {
+            container.innerHTML = '<div class="empty-state">❌ No other files found with this clause</div>';
+            return;
+        }
+        
+        // Display similar files
+        container.innerHTML = data.files.map(file => `
+            <div class="similar-file-item" onclick="openDocumentModal('${file.file_id}', '${file.file_name}', 'application/pdf')">
+                <div class="similar-file-icon">📄</div>
+                <div class="similar-file-info">
+                    <div class="similar-file-name">${file.file_name}</div>
+                    <div class="similar-file-clause">${file.section_number}. ${file.clause_title}</div>
+                    <span class="match-badge ${file.match_type}">${file.match_type}</span>
+                </div>
+            </div>
+        `).join('');
+        
+        console.log(`✅ Displayed ${data.count} similar files`);
+        
+    } catch (error) {
+        console.error('Error finding similar files:', error);
+        container.innerHTML = '<div class="empty-state">⚠️ Error loading similar files</div>';
+    }
+}
+
+
+
+/**
+ * Load document details (tags, file info)
+ */
+/**
+ * Load document details (tags, file info)
+ */
+/**
+ * Load document details (tags) when modal opens
+ */
+async function loadDocumentDetails(fileId) {
+    try {
+        // Find file from appState.files array
+        const file = appState.files.find(f => f.id === fileId);
+        
+        if (!file) {
+            console.error('File not found in appState');
+            displayTags([]);
+            return;
+        }
+        
+        console.log('File object:', file);
+        
+        // Display tags from file object
+        const tags = file.aiTags || file.tags || [];
+        displayTags(tags);
+        
+    } catch (error) {
+        console.error('Error loading document details:', error);
+        displayTags([]);
+    }
+}
+
+/**
+ * Display tags in the modal
+ */
+function displayTags(tags) {
+    const container = document.getElementById('tagsContent');
+    
+    if (!tags || tags.length === 0) {
+        container.innerHTML = '<div class="empty-state">No tags available</div>';
+        return;
+    }
+    
+    container.innerHTML = tags.map(tag => 
+        `<span class="tag">${tag}</span>`
+    ).join('');
+}
+
+
+
+
+/**
+ * Display tags in modal
+ */
+function displayTags(tags) {
+    const container = document.getElementById('tagsContent');
+    
+    if (!tags || tags.length === 0) {
+        container.innerHTML = '<p class="empty-state">No tags</p>';
+        return;
+    }
+    
+    container.innerHTML = tags.map(tag => 
+        `<span class="tag">${tag}</span>`
+    ).join('');
+}
+
+/**
+ * Display file information
+ */
+/**
+ * Display file information
+ */
+/**
+ * Display file information
+ */
+function displayFileInfo(file) {
+    const container = document.getElementById('fileInfoContent');
+    
+    // Format file size
+    const formatSize = (bytes) => {
+        if (!bytes || bytes === 'Unknown') return 'Unknown';
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        if (bytes === 0) return '0 B';
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    };
+    
+    // Format date
+    const formatDate = (dateStr) => {
+        if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    };
+    
+    const info = [
+        { label: 'Type', value: file.mime_type || file.mimeType || 'Unknown' },
+        { label: 'Size', value: formatSize(file.size) },
+        { label: 'Owner', value: file.ownerName || 'Unknown' },
+        { label: 'Modified', value: formatDate(file.modified_time || file.modifiedTime) },
+        { label: 'Created', value: formatDate(file.created_time || file.createdTime) }
+    ];
+    
+    container.innerHTML = info.map(item => `
+        <div class="info-row">
+            <span class="info-label">${item.label}:</span>
+            <span class="info-value">${item.value}</span>
+        </div>
+    `).join('');
+}
+
+
+
+/**
+ * Extract clauses from document
+ */
+async function extractClauses() {
+    if (!currentDocumentId) {
+        alert('No document selected');
+        return;
+    }
+    
+    const clausesList = document.getElementById('clausesList');
+    clausesList.innerHTML = '<div class="loading-state">Extracting clauses... Please wait.</div>';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/documents/${currentDocumentId}/extract-clauses`, {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to extract clauses');
+        }
+        
+        const data = await response.json();
+        currentClauses = data.clauses || [];
+        
+        if (currentClauses.length === 0) {
+            clausesList.innerHTML = '<div class="empty-state">No clauses found in this document</div>';
+            return;
+        }
+        
+        // Display clauses list
+        displayClausesList(currentClauses);
+        
+    } catch (error) {
+        console.error('Error extracting clauses:', error);
+        clausesList.innerHTML = '<div class="empty-state">Error extracting clauses. Please try again.</div>';
+        alert('Failed to extract clauses: ' + error.message);
+    }
+}
+
+/**
+ * Display list of clauses (titles only, no content preview)
+ */
+function displayClausesList(clauses) {
+    const container = document.getElementById('clausesList');
+    
+    container.innerHTML = clauses.map(clause => `
+        <div class="clause-item" onclick="selectClause(${clause.clause_number})" data-clause="${clause.clause_number}">
+            <div class="clause-item-number">${clause.section_number || clause.clause_number}</div>
+            <div class="clause-item-title">${clause.clause_title || clause.title}</div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Select and display a clause
+ */
+async function selectClause(clauseNumber) {
+    selectedClauseNumber = clauseNumber;
+    
+    console.log('🔍 Clause clicked:', clauseNumber);
+    
+    // Highlight selected clause
+    document.querySelectorAll('.clause-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    const selectedItem = document.querySelector(`.clause-item[data-clause="${clauseNumber}"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('active');
+    }
+    
+    // Find clause data
+    const clause = currentClauses.find(c => c.clause_number === clauseNumber);
+    
+    if (!clause) {
+        console.error('❌ Clause not found:', clauseNumber);
+        return;
+    }
+    
+    console.log('✅ Selected clause:', clause);
+    
+    // Display clause content in middle panel
+    displaySelectedClause(clause);
+    
+    // Find similar files with this clause title
+    const clauseTitle = clause.title || clause.clause_title;
+    console.log('🔍 Searching for similar files with title:', clauseTitle);
+    await findSimilarFiles(clauseTitle);
+}
+/**
+ * Display selected clause content
+ */
+/**
+ * Display selected clause content
+ */
+function displaySelectedClause(clause) {
+    const container = document.getElementById('selectedClauseContainer');
+    const titleEl = document.getElementById('selectedClauseTitle');
+    const contentEl = document.getElementById('selectedClauseContent');
+    
+    console.log('📄 Displaying clause:', clause);
+    
+    // Show container
+    container.style.display = 'block';
+    
+    // Get clause data (try ALL possible property names!)
+    const clauseNumber = clause.section_number || clause.clause_number || clause.clauseNumber || clause.sectionNumber || '';
+    const clauseTitle = clause.title || clause.clause_title || clause.clauseTitle || 'Untitled Clause';
+    
+    // ← THIS IS THE KEY FIX - Try ALL possible content property names!
+    const clauseContent = clause.content || clause.clause_content || clause.clauseContent || clause.text || 'No content available';
+    
+    console.log('📝 Title:', clauseTitle);
+    console.log('📝 Content length:', clauseContent?.length || 0);
+    console.log('📝 Content preview:', clauseContent?.substring(0, 100));
+    
+    // Set content
+    titleEl.textContent = `${clauseNumber}. ${clauseTitle}`;
+    contentEl.textContent = clauseContent;
+    
+    // Reset save button
+    const saveBtn = document.getElementById('saveToLibraryBtn');
+    if (saveBtn) {
+        saveBtn.textContent = '💾 Save to Library';
+        saveBtn.classList.remove('saved');
+        saveBtn.disabled = false;
+    }
+}
+
+
+/**
+ * Save clause to library
+ */
+/**
+ * Save clause to library
+ */
+async function saveClauseToLibrary() {
+    if (!currentDocumentId || selectedClauseNumber === null) {
+        alert('No clause selected');
+        return;
+    }
+    
+    const saveBtn = document.getElementById('saveToLibraryBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/clauses/save-to-library`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                document_id: currentDocumentId,
+                clause_number: selectedClauseNumber
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to save clause');
+        }
+        
+        if (data.already_saved) {
+            saveBtn.textContent = '✓ Already Saved';
+        } else {
+            saveBtn.textContent = '✓ Saved to Library';
+        }
+        
+        saveBtn.classList.add('saved');
+        
+        // Show success notification
+        showNotification('Clause saved to library successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Error saving clause:', error);
+        alert('Failed to save clause: ' + error.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 Save to Library';
+    }
+}
+
+
+/**
+ * Close modal
+ */
+function closeModal() {
+    const modal = document.getElementById('documentModal');
+    modal.style.display = 'none';
+    
+    // Reset state
+    currentDocumentId = null;
+    currentClauses = [];
+    selectedClauseNumber = null;
+    
+    // Clear content
+    document.getElementById('clausesList').innerHTML = 
+        '<div class="loading-state">Click "Extract Clauses" to analyze document</div>';
+    document.getElementById('selectedClauseContainer').style.display = 'none';
+}
+
+/**
+ * Show notification (helper function)
+ */
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#4CAF50' : '#2196F3'};
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+/**
+ * Format file size (helper function)
+ */
+function formatFileSize(bytes) {
+    if (!bytes) return 'Unknown';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+/**
+ * Format date (helper function)
+ */
+function formatDate(dateString) {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+
+
+
+
+
+
 // ==================== END OF NEW FUNCTIONS ====================
 
 // KEEP YOUR EXISTING initApp() function below - DON'T REMOVE IT
@@ -1202,8 +1926,11 @@ async function initApp() {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('auth') === 'success') {
     window.history.replaceState({}, document.title, window.location.pathname);
-    window.location.reload();
+    showNotification('✅ Connected successfully!', 'success');  // ✅ ADD THIS
   }
+
+
+  
   
   renderCurrentView();
 }

@@ -4,17 +4,76 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Knowledge Hub - Your Google Drive</title>
-    
-    <!-- Google Fonts -->
+    <!-- Favicon & Fonts -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%231976d2'/><text x='50' y='70' font-size='60' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>K</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="app-root"></div>
     <script src="runtime-env.js"></script>
     <script src="app.js"></script>
+    
+    <!-- Document Details Modal -->
+    <!-- Place this inside <body> -->
+    <div id="documentModal" class="modal">
+        <div class="modal-overlay" onclick="closeModal()"></div>
+        <div class="modal-content">
+            <!-- Header -->
+            <div class="modal-header">
+                <div>
+                    <h2 id="modalTitle">Document Details</h2>
+                    <p id="modalSubtitle" class="modal-subtitle"></p>
+                </div>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body three-column-layout">
+                <!-- Clauses List -->
+                <div class="modal-column clauses-column">
+                    <h3>📋 Clauses</h3>
+                    <div id="clausesList" class="clauses-list">
+                        <div class="loading-state">Loading clauses...</div>
+                    </div>
+                </div>
+                <!-- Tags + Clause Content -->
+                <div class="modal-column content-column">
+                    <h3>🏷️ Tags</h3>
+                    <div id="tagsContainer" class="tags-content"></div>
+                    <div id="selectedClauseContainer" class="selected-clause-container" style="display: none;">
+                        <h3>📄 Selected Clause</h3>
+                        <div class="clause-display">
+                            <h4 id="selectedClauseTitle"></h4>
+                            <div id="selectedClauseContent" class="clause-content"></div>
+                            <button id="saveToLibraryBtn" class="btn-save-library" onclick="saveClauseToLibrary()">
+                                💾 Save to Library
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Similar Files Column -->
+                <div class="modal-column info-column">
+                    <h3>🔗 Similar Files</h3>
+                    <div id="similarFilesContent" class="similar-files-content">
+                        <div class="empty-state">Select a clause to find similar files</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Footer w/ buttons left and right, both small -->
+            <div id="modalFooter" class="modal-footer" style="display: flex; justify-content: flex-end; gap: 12px; padding: 18px 24px; border-top: 1px solid #EEE;">
+                <button id="driveBtn"
+                        class="btn-secondary btn-drive"
+                        style="font-size:0.97rem; padding:0.37rem 1.1rem; min-width:unset; border-radius:6px;">
+                    📂 Open in Google Drive
+                </button>
+                <button onclick="closeModal()" class="btn-primary"
+                        style="font-size: 1rem; border-radius: 6px; padding:0.5rem 1.3rem;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
