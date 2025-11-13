@@ -96,6 +96,9 @@ class Document(Base):
     id = Column(String(255), primary_key=True)  # Google Drive file ID
     drive_file_id = Column(String(255), unique=True, nullable=False, index=True)
     
+    account_email = Column(String(255), nullable=True, index=True)  # User's Google email
+    account_id = Column(String(255), nullable=True, index=True)     # User's Google ID
+    
     # Basic metadata
     title = Column(String(500), nullable=False)
     mime_type = Column(String(255), nullable=True)

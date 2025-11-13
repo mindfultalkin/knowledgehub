@@ -1,7 +1,5 @@
-"""
-Database models for Knowledge Hub
-"""
-from .metadata import (
+from models.clauses import DocumentClause, ClauseLibrary
+from models.metadata import (
     # Enums
     ContentType,
     ProcessingStatus,
@@ -35,4 +33,6 @@ __all__ = [
     'AccessControl',
     'ProcessingQueue',
     'SyncCheckpoint'
+    'DocumentClause',
+    'ClauseLibrary'
 ]

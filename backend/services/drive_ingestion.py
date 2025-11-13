@@ -1,9 +1,9 @@
 """
 Google Drive Ingestion Service
-Syncs files from Google Drive to database
+Syncs files from Google Drive to database with multi-user support
 """
 from typing import Optional, List, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from google_drive import GoogleDriveClient
 from models.metadata import (
@@ -11,29 +11,41 @@ from models.metadata import (
     ProcessingQueue, 
     SyncCheckpoint, 
     TaskType, 
-    ProcessingStatus
+    ProcessingStatus,
+    Tag,
+    DocumentTag
 )
-
+from tagging import SimpleTagger
 import hashlib
 import config
 
 
 class DriveIngestionService:
-    """
-    Service to ingest Google Drive files into database
-    """
-    
+    """Service to sync Google Drive files to database"""
+
     def __init__(self, drive_client: GoogleDriveClient, db: Session):
         self.drive_client = drive_client
         self.db = db
-        
+        self.tagger = SimpleTagger()
+        self._current_user_email = None
+
     def sync_all_files(self) -> Dict:
         """
         Sync all files from Google Drive to database
-        Returns: {total_files, new_files, updated_files, errors}
+        ✅ Each user's files stored with their email
         """
         print("🔄 Starting full sync from Google Drive...")
-        
+
+        # ✅ GET CURRENT USER EMAIL ONCE AT START
+        current_user_email = None
+        try:
+            about = self.drive_client.service.about().get(fields='user').execute()
+            current_user_email = about['user']['emailAddress']
+            self._current_user_email = current_user_email
+            print(f"📧 Syncing for user: {current_user_email}")
+        except Exception as e:
+            print(f"⚠️ Could not get user: {e}")
+
         stats = {
             "total_files": 0,
             "new_files": 0,
@@ -41,24 +53,23 @@ class DriveIngestionService:
             "errors": 0,
             "skipped": 0
         }
-        
+
         try:
             page_token = None
-            
+
             while True:
-                # Get files from Drive
-                results = self.drive_client.list_files(
-                    page_size=100,
-                    page_token=page_token
-                )
-                
+                results = self.drive_client.list_files(page_size=100, page_token=page_token)
                 files = results.get('files', [])
+
+                if not files:
+                    break
+
                 stats["total_files"] += len(files)
-                
-                # Process each file
+
                 for file in files:
                     try:
-                        result = self._process_file(file)
+                        # ✅ PASS EMAIL TO PROCESS FILE
+                        result = self._process_file(file, current_user_email)
                         if result == "new":
                             stats["new_files"] += 1
                         elif result == "updated":
@@ -66,94 +77,145 @@ class DriveIngestionService:
                         elif result == "skipped":
                             stats["skipped"] += 1
                     except Exception as e:
-                        print(f"❌ Error processing file {file.get('name')}: {e}")
+                        print(f"❌ Error processing file: {e}")
                         stats["errors"] += 1
-                
-                # Check for next page
+
                 page_token = results.get('nextPageToken')
                 if not page_token:
                     break
-                    
-                print(f"✅ Processed {stats['total_files']} files so far...")
-            
-            # Save sync checkpoint
+
             self._save_checkpoint(stats)
-            
             print(f"🎉 Sync complete: {stats}")
             return stats
-            
+
         except Exception as e:
             print(f"❌ Sync failed: {e}")
-            stats["errors"] += 1
+            import traceback
+            print(traceback.format_exc())
             return stats
-    
-    def _process_file(self, file_data: Dict) -> str:
+
+    def _process_file(self, file_data: Dict, account_email: str = None) -> str:
         """
-        Process a single file from Google Drive
-        Returns: 'new', 'updated', or 'skipped'
+        Process a single file - ONLY if new or modified
+        ✅ Strips microseconds for accurate comparison
         """
         drive_file_id = file_data.get('id')
+        file_name = file_data.get('name', 'Unknown')
         
-        # Check if file already exists in database
-        existing_doc = self.db.query(Document).filter(
-            Document.drive_file_id == drive_file_id
-        ).first()
+        # Get modified time from Google Drive
+        modified_time_str = file_data.get('modifiedTime')
+        if not modified_time_str:
+            print(f"⚠️ No modified time for {file_name}, skipping")
+            return "skipped"
         
-        # Extract metadata
-        file_metadata = self._extract_metadata(file_data)
-        
-        if existing_doc:
-            # Check if file was modified
-            drive_modified = file_data.get('modifiedTime')
-            db_modified = existing_doc.modified_at.isoformat() if existing_doc.modified_at else None
+        # Parse modified time (make timezone-aware)
+        try:
+            modified_time_str = modified_time_str.replace('Z', '+00:00')
+            drive_modified_at = datetime.fromisoformat(modified_time_str)
             
-            if drive_modified and drive_modified != db_modified:
-                # Update existing document
+            if drive_modified_at.tzinfo is None:
+                drive_modified_at = drive_modified_at.replace(tzinfo=timezone.utc)
+            
+            # ✅ STRIP MICROSECONDS for accurate comparison
+            drive_modified_at = drive_modified_at.replace(microsecond=0)
+            
+        except Exception as e:
+            print(f"⚠️ Could not parse time for {file_name}: {e}")
+            drive_modified_at = datetime.now(timezone.utc)
+        
+        try:
+            # Check if file exists
+            existing_doc = self.db.query(Document).filter(
+                Document.drive_file_id == drive_file_id
+            ).first()
+            
+            if existing_doc:
+                # Check if file was modified
+                db_modified_at = existing_doc.modified_at
+                
+                if db_modified_at and db_modified_at.tzinfo is None:
+                    db_modified_at = db_modified_at.replace(tzinfo=timezone.utc)
+                
+                # ✅ STRIP MICROSECONDS from DB time too
+                if db_modified_at:
+                    db_modified_at = db_modified_at.replace(microsecond=0)
+                
+                if db_modified_at and drive_modified_at <= db_modified_at:
+                    # File hasn't changed - skip everything
+                    print(f"⏭️  Skipped (unchanged): {file_name}")
+                    return "skipped"
+            
+            # Extract metadata
+            file_metadata = self._extract_metadata(file_data, account_email)
+            
+            if existing_doc:
+                # Update existing file
                 for key, value in file_metadata.items():
                     setattr(existing_doc, key, value)
                 
                 existing_doc.db_updated_at = datetime.utcnow()
                 self.db.commit()
                 
-                # Queue for reprocessing
                 self._queue_processing_tasks(drive_file_id)
+                self._create_simple_tags(drive_file_id, file_data)
                 
-                print(f"🔄 Updated: {file_data.get('name')}")
+                print(f"🔄 Updated: {file_name}")
                 return "updated"
             else:
-                return "skipped"
-        else:
-            # Create new document
-            new_doc = Document(**file_metadata)
-            self.db.add(new_doc)
-            self.db.commit()
-            
-            # Queue for processing
-            self._queue_processing_tasks(drive_file_id)
-            
-            print(f"✅ Added: {file_data.get('name')}")
-            return "new"
-    
-    def _extract_metadata(self, file_data: Dict) -> Dict:
+                # New file
+                new_doc = Document(**file_metadata)
+                self.db.add(new_doc)
+                self.db.flush()
+                self.db.commit()
+                
+                self._queue_processing_tasks(drive_file_id)
+                self._create_simple_tags(drive_file_id, file_data)
+                
+                print(f"✅ Added: {file_name} (User: {account_email})")
+                return "new"
+        
+        except Exception as e:
+            print(f"❌ Error processing '{file_name}': {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            raise
+
+    def _extract_metadata(self, file_data: Dict, account_email: str = None) -> Dict:
         """
         Extract metadata from Google Drive file data
+        ✅ NEW: Include account_email to track which user this file belongs to
         """
         # Parse timestamps
         created_time = file_data.get('createdTime')
         modified_time = file_data.get('modifiedTime')
-        
-        created_at = datetime.fromisoformat(created_time.replace('Z', '+00:00')) if created_time else None
-        modified_at = datetime.fromisoformat(modified_time.replace('Z', '+00:00')) if modified_time else None
-        
+
+        def parse_iso_time(time_str):
+            if not time_str:
+                return None
+            try:
+                time_str = time_str.replace('Z', '+00:00')
+                return datetime.fromisoformat(time_str)
+            except Exception as e:
+                print(f"⚠️ Could not parse time '{time_str}': {e}")
+                return None
+
+        created_at = parse_iso_time(created_time)
+        modified_at = parse_iso_time(modified_time)
+
         # Extract owner info
         owners = file_data.get('owners', [])
         owner_email = owners[0].get('emailAddress') if owners else None
         owner_name = owners[0].get('displayName') if owners else None
-        
+
         # Get file extension
         file_name = file_data.get('name', '')
         file_format = self._get_file_extension(file_name)
-        
+
+        # Create checksum
+        checksum = hashlib.md5(
+            f"{file_data.get('id')}{modified_time}".encode()
+        ).hexdigest()
+
         metadata = {
             'id': file_data.get('id'),
             'drive_file_id': file_data.get('id'),
@@ -169,28 +231,36 @@ class DriveIngestionService:
             'created_at': created_at,
             'modified_at': modified_at,
             'status': 'active',
+            # ✅ THIS IS THE KEY - Store which account this file belongs to
+            'account_email': account_email,
+            'account_id': None,
+            'checksum': checksum,
             'db_created_at': datetime.utcnow(),
             'db_updated_at': datetime.utcnow()
         }
-        
+
         return metadata
-    
+
     def _get_file_extension(self, filename: str) -> Optional[str]:
         """Extract file extension"""
         if '.' in filename:
             return '.' + filename.rsplit('.', 1)[1].lower()
         return None
-    
+
     def _queue_processing_tasks(self, document_id: str):
         """
         Queue processing tasks for a document
+        Creates 3 tasks per document:
+        1. Extract text
+        2. AI tagging
+        3. Create embeddings
         """
         tasks = [
             TaskType.EXTRACT_TEXT,
             TaskType.AI_TAGGING,
             TaskType.CREATE_EMBEDDING
         ]
-        
+
         for task_type in tasks:
             # Check if task already exists
             existing_task = self.db.query(ProcessingQueue).filter(
@@ -198,21 +268,24 @@ class DriveIngestionService:
                 ProcessingQueue.task_type == task_type,
                 ProcessingQueue.status.in_([ProcessingStatus.PENDING, ProcessingStatus.PROCESSING])
             ).first()
-            
+
             if not existing_task:
                 new_task = ProcessingQueue(
                     document_id=document_id,
                     task_type=task_type,
                     status=ProcessingStatus.PENDING,
-                    priority=5 if task_type == TaskType.EXTRACT_TEXT else 7
+                    priority=5 if task_type == TaskType.EXTRACT_TEXT else 7,
+                    retry_count=0,
+                    max_retries=3
                 )
                 self.db.add(new_task)
-        
+
         self.db.commit()
-    
+
     def _save_checkpoint(self, stats: Dict):
         """
         Save sync checkpoint
+        Records when sync happened, how many files, any errors
         """
         checkpoint = SyncCheckpoint(
             source='google_drive',
@@ -223,15 +296,13 @@ class DriveIngestionService:
         )
         self.db.add(checkpoint)
         self.db.commit()
-    
+
     def get_last_sync_info(self) -> Optional[Dict]:
-        """
-        Get information about last sync
-        """
+        """Get information about last sync"""
         last_checkpoint = self.db.query(SyncCheckpoint).filter(
             SyncCheckpoint.source == 'google_drive'
         ).order_by(SyncCheckpoint.created_at.desc()).first()
-        
+
         if last_checkpoint:
             return {
                 'last_sync_time': last_checkpoint.last_sync_time.isoformat(),
@@ -240,24 +311,22 @@ class DriveIngestionService:
                 'status': last_checkpoint.status
             }
         return None
-    
+
     def get_sync_stats(self) -> Dict:
-        """
-        Get overall sync statistics
-        """
+        """Get overall sync statistics"""
         total_docs = self.db.query(Document).count()
         pending_tasks = self.db.query(ProcessingQueue).filter(
             ProcessingQueue.status == ProcessingStatus.PENDING
         ).count()
-        
+
         processing_tasks = self.db.query(ProcessingQueue).filter(
             ProcessingQueue.status == ProcessingStatus.PROCESSING
         ).count()
-        
+
         failed_tasks = self.db.query(ProcessingQueue).filter(
             ProcessingQueue.status == ProcessingStatus.FAILED
         ).count()
-        
+
         return {
             'total_documents': total_docs,
             'pending_tasks': pending_tasks,
@@ -265,3 +334,94 @@ class DriveIngestionService:
             'failed_tasks': failed_tasks,
             'last_sync': self.get_last_sync_info()
         }
+
+    def _create_simple_tags(self, document_id: str, file_data: Dict):
+        """
+        Create simple tags based on file type and metadata using SimpleTagger
+        Called after document is created/updated
+        """
+        file_name = file_data.get('name', '')
+        mime_type = file_data.get('mimeType', '')
+        description = file_data.get('description', '')
+        
+        # ✅ Use SimpleTagger to generate tags
+        tags_to_create = self.tagger.generate_tags(file_name, mime_type, description)
+        
+        print(f"🏷️  Creating tags for {file_name}: {tags_to_create}")
+        
+        # ✅ CREATE TAGS IN DATABASE
+        for tag_name in set(tags_to_create):  # Remove duplicates
+            try:
+                # Get or create tag
+                tag = self.db.query(Tag).filter(Tag.name == tag_name).first()
+                
+                if not tag:
+                    tag = Tag(
+                        name=tag_name,
+                        category='simple',  # Mark as simple (not AI)
+                        usage_count=0
+                    )
+                    self.db.add(tag)
+                    self.db.flush()  # Get tag ID
+                
+                # Check if document already has this tag
+                existing_doc_tag = self.db.query(DocumentTag).filter(
+                    DocumentTag.document_id == document_id,
+                    DocumentTag.tag_id == tag.id
+                ).first()
+                
+                if not existing_doc_tag:
+                    # Create document-tag relationship
+                    doc_tag = DocumentTag(
+                        document_id=document_id,
+                        tag_id=tag.id,
+                        confidence_score=1.0,  # Simple tags = 100% confidence
+                        source='rule',  # Mark as rule-based (not ML)
+                        created_at=datetime.utcnow()
+                    )
+                    self.db.add(doc_tag)
+                    
+                    # Increment tag usage count
+                    tag.usage_count += 1
+            
+            except Exception as e:
+                print(f"❌ Error creating tag '{tag_name}': {e}")
+        
+        self.db.commit()
+        print(f"✅ Tags created for {file_name}")
+
+    def _queue_processing_tasks(self, document_id: str):
+        """
+        Queue processing tasks for a document
+        Creates 3 tasks per document:
+        1. Extract text
+        2. AI tagging
+        3. Create embeddings
+        """
+        tasks = [
+            TaskType.EXTRACT_TEXT,
+            TaskType.AI_TAGGING,
+            TaskType.CREATE_EMBEDDING
+        ]
+
+        for task_type in tasks:
+            # Check if task already exists
+            existing_task = self.db.query(ProcessingQueue).filter(
+                ProcessingQueue.document_id == document_id,
+                ProcessingQueue.task_type == task_type,
+                ProcessingQueue.status.in_([ProcessingStatus.PENDING, ProcessingStatus.PROCESSING])
+            ).first()
+
+            if not existing_task:
+                new_task = ProcessingQueue(
+                    document_id=document_id,
+                    task_type=task_type,
+                    status=ProcessingStatus.PENDING,
+                    priority=5 if task_type == TaskType.EXTRACT_TEXT else 7,
+                    retry_count=0,
+                    max_retries=3
+                )
+                self.db.add(new_task)
+
+        self.db.commit()
+
