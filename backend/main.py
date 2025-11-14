@@ -99,7 +99,7 @@ async def auto_extract_clauses_on_startup():
     await asyncio.sleep(10)  # Wait 10 seconds after startup
     
     # Skip auto-extraction in Railway to avoid cold start issues
-    if os.getenv('RAILWAY_ENVIRONMENT'):
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
         print("🚇 Railway environment detected - skipping auto extraction on startup")
         return
         

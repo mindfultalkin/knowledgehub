@@ -6,7 +6,7 @@ from urllib.parse import quote_plus
 def get_environment_config():
     """Get configuration based on environment"""
     # Check for Railway environment
-    is_railway = os.getenv("RAILWAY_ENVIRONMENT") is not None
+    is_railway = os.getenv("RAILWAY_ENVIRONMENT_NAME") is not None
     railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
     
     if is_railway and railway_domain:
@@ -133,7 +133,7 @@ if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
 
 # Debug information
 if __name__ == "__main__":
-    print(f"Environment: {'Railway' if os.getenv('RAILWAY_ENVIRONMENT') else 'production' if os.getenv('VERCEL_ENV') == 'production' else 'development'}")
+    print(f"Environment: {'Railway' if os.getenv('RAILWAY_ENVIRONMENT_NAME') else 'production' if os.getenv('VERCEL_ENV') == 'production' else 'development'}")
     print(f"API Base URL: {SERVICE_API_BASE_URL}")
     print(f"Frontend URL: {FRONTEND_URL}")
     print(f"Redirect URI: {GOOGLE_REDIRECT_URI}")
