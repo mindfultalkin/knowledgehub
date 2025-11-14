@@ -1,6 +1,6 @@
 // Knowledge Hub - Enhanced Frontend with All Features
-
-const API_BASE_URL = window.RUNTIME_ENV?.SERVICE_API_BASE_URL;
+const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || '';
+// const API_BASE_URL = window.RUNTIME_ENV?.SERVICE_API_BASE_URL;
 console.log('API_BASE_URL:', API_BASE_URL);
 // Application State
 // Application State

@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import os
 import sys
 import asyncio
@@ -37,13 +39,35 @@ app.add_middleware(
 # Include the API router with /api prefix
 app.include_router(router, prefix="/api")
 
+# Serve frontend static files
+frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+if os.path.exists(frontend_path):
+    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+    
+    @app.get("/")
+    async def serve_frontend():
+        return FileResponse(os.path.join(frontend_path, 'index.html'))
+    
+    @app.get("/{full_path:path}")
+    async def catch_all(full_path: str):
+        """Serve frontend routes for SPA"""
+        if not full_path.startswith('api/') and not full_path.startswith('docs'):
+            frontend_file = os.path.join(frontend_path, full_path)
+            if os.path.exists(frontend_file) and os.path.isfile(frontend_file):
+                return FileResponse(frontend_file)
+        return FileResponse(os.path.join(frontend_path, 'index.html'))
 
 async def auto_extract_clauses_on_startup():
     """
     Background task to automatically extract clauses from all documents
     """
-    await asyncio.sleep(5)  # Wait 5 seconds after startup
+    await asyncio.sleep(10)  # Wait 10 seconds after startup to ensure app is ready
     
+    # Skip auto-extraction in Railway to avoid cold start issues
+    if os.getenv('RAILWAY_ENVIRONMENT'):
+        print("🚇 Railway environment detected - skipping auto extraction on startup")
+        return
+        
     try:
         print("\n🔄 Starting automatic clause extraction...")
         
@@ -63,7 +87,7 @@ async def auto_extract_clauses_on_startup():
         
         # Get all files from Google Drive
         files_response = drive_client.service.files().list(
-            pageSize=100,
+            pageSize=50,  # Reduced for Railway
             fields="files(id, name, mimeType)",
             q="trashed=false"
         ).execute()
@@ -73,9 +97,7 @@ async def auto_extract_clauses_on_startup():
         # Filter only document files (PDF, DOCX, Google Docs)
         doc_files = [
             f for f in files 
-            if 'pdf' in f['mimeType'].lower() 
-            or 'word' in f['mimeType'].lower() 
-            or 'document' in f['mimeType'].lower()
+            if any(ext in f['mimeType'].lower() for ext in ['pdf', 'word', 'document', 'text'])
         ]
         
         print(f"📄 Found {len(doc_files)} document files to process")
@@ -103,7 +125,7 @@ async def auto_extract_clauses_on_startup():
                 # Extract content
                 content = content_extractor.extract_content(file_id, mime_type)
                 
-                if not content or len(content) < 100:
+                if not content or len(content) < 50:  # Reduced threshold
                     print(f"     ⚠️  Skipped (insufficient content)")
                     continue
                 
@@ -114,22 +136,22 @@ async def auto_extract_clauses_on_startup():
                     print(f"     ⚠️  No clauses found")
                     continue
                 
-                # Save to database
-                for clause in clauses:
+                # Save to database (limit clauses to avoid memory issues)
+                for clause in clauses[:20]:  # Limit clauses per document
                     db_clause = DocumentClause(
                         document_id=file_id,
                         clause_number=clause['clause_number'],
                         section_number=clause.get('section_number', str(clause['clause_number'])),
                         clause_title=clause['title'],
-                        clause_content=clause['content']
+                        clause_content=clause['content'][:1000]  # Limit content length
                     )
                     db.add(db_clause)
                 
                 db.commit()
-                print(f"     ✅ Extracted {len(clauses)} clauses")
+                print(f"     ✅ Extracted {len(clauses[:20])} clauses")
                 
             except Exception as e:
-                print(f"     ❌ Error: {e}")
+                print(f"     ❌ Error processing {file['name']}: {str(e)}")
                 db.rollback()
                 continue
         
@@ -141,26 +163,32 @@ async def auto_extract_clauses_on_startup():
         import traceback
         print(traceback.format_exc())
 
-
 # Schedule auto-extraction on startup
 @app.on_event("startup")
 async def startup_event():
     """
     Run background tasks on startup
     """
+    # Don't block startup with extraction in production
     asyncio.create_task(auto_extract_clauses_on_startup())
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "Knowledge Hub API"}
 
 # For local development
 if __name__ == "__main__":
     import uvicorn
     
     # Check for Tesseract OCR
-    tesseract_path = os.getenv('TESSERACT_PATH')
-    if tesseract_path and os.path.exists(tesseract_path):
+    try:
+        import subprocess
+        subprocess.run(["tesseract", "--version"], capture_output=True, check=True)
         print("✅ Tesseract OCR configured successfully!")
-    else:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         print("⚠️  Tesseract OCR not found - OCR features will be limited")
     
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, )
+    workers = int(os.getenv("WORKERS", 1))  # Default to 1 worker for Railway
+    uvicorn.run("main:app", host="0.0.0.0", port=port, workers=workers)

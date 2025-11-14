@@ -2,18 +2,25 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy backend files
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend and frontend
 COPY backend/ ./backend/
+COPY frontend/ ./frontend/
 
-# Install dependencies
-RUN pip install --upgrade pip setuptools wheel
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Install backend requirements without heavy NLP packages
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN cd backend && pip install -r requirements.txt
+# Create necessary directories
+RUN mkdir -p backend/derived_storage backend/temp_downloads backend/index_data
 
-# Expose port (Railway will inject $PORT)
+# Expose port
 EXPOSE 8000
 
-# Start command: Run uvicorn with 4 workers
-CMD cd backend && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 4
+# Serve both backend and frontend
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
