@@ -22,10 +22,10 @@ def get_environment_config():
     is_production = os.getenv("VERCEL_ENV") == "production"
     if is_production:
         return {
-            "SERVICE_API_BASE_URL": "https://knowledgehub-eta.vercel.app/api",
-            "FRONTEND_URL": "https://knowledgehub-eta.vercel.app",
-            "ALLOWED_ORIGINS": ["https://knowledgehub-eta.vercel.app"],
-            "GOOGLE_REDIRECT_URI": "https://knowledgehub-eta.vercel.app/api/oauth2callback"
+            "SERVICE_API_BASE_URL": "https://knowledgehub-production-9572.up.railway.app/api",
+            "FRONTEND_URL": "https://knowledgehub-production-9572.up.railway.app",
+            "ALLOWED_ORIGINS": ["https://knowledgehub-production-9572.up.railway.app"],
+            "GOOGLE_REDIRECT_URI": "https://knowledgehub-production-9572.up.railway.app/api/oauth2callback"
         }
     
     # Local development (default)
