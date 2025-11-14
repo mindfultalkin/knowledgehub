@@ -11,10 +11,10 @@ backend_dir = os.path.dirname(os.path.abspath(__file__))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-from config import ALLOWED_ORIGINS
-from api import router  # Import the router
-from database import SessionLocal, Base, engine
-from models import Document, DocumentClause, ClauseLibrary
+from .config import ALLOWED_ORIGINS
+from .api import router
+from .database import SessionLocal, Base, engine
+from .models import Document, DocumentClause, ClauseLibrary
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
