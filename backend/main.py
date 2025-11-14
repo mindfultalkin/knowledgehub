@@ -131,6 +131,27 @@ async def auto_extract_clauses_on_startup():
         import traceback
         traceback.print_exc()
 
+@app.get("/debug/env")
+async def debug_environment():
+    """Debug endpoint to see all Railway environment variables"""
+    railway_vars = {}
+    for key, value in os.environ.items():
+        if 'RAILWAY' in key.upper():
+            railway_vars[key] = value
+    
+    # Also check other deployment indicators
+    other_vars = {
+        'PORT': os.getenv('PORT'),
+        'DATABASE_URL': os.getenv('DATABASE_URL'),
+        'VERCEL_ENV': os.getenv('VERCEL_ENV'),
+    }
+    
+    return {
+        "railway_environment_variables": railway_vars,
+        "other_deployment_variables": other_vars,
+        "all_environment_variables": dict(os.environ)  # Be careful with this in production
+    }
+
 @app.get("/debug/database")
 async def debug_database():
     """Debug endpoint to check database connection"""
