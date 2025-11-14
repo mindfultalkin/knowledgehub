@@ -31,7 +31,7 @@ class GoogleDriveClient:
                 "auth_uri": config.GOOGLE_AUTH_URI,
                 "token_uri": config.GOOGLE_TOKEN_URI,
                 "auth_provider_x509_cert_url": config.GOOGLE_AUTH_PROVIDER_CERT_URL,
-                "redirect_uris": [config.GOOGLE_REDIRECT_URI]
+                "redirect_uris": [config.GOOGLE_REDIRECT_URIS]
             }
         }
         
@@ -41,7 +41,7 @@ class GoogleDriveClient:
             flow = Flow.from_client_config(
                 self.client_config,
                 scopes=self.scopes,
-                redirect_uri=config.GOOGLE_REDIRECT_URI
+                redirect_uri=config.GOOGLE_REDIRECT_URIS
             )
             
             # ✅ FORCE ACCOUNT SELECTION + CONSENT SCREEN
@@ -52,7 +52,7 @@ class GoogleDriveClient:
             )
             
             print(f"✅ Authorization URL generated")
-            print(f"🔗 Redirect URI: {config.GOOGLE_REDIRECT_URI}")
+            print(f"🔗 Redirect URI: {config.GOOGLE_REDIRECT_URIS}")
             return authorization_url, state
             
         except Exception as e:
@@ -65,7 +65,7 @@ class GoogleDriveClient:
             flow = Flow.from_client_config(
                 self.client_config,
                 scopes=self.scopes,
-                redirect_uri=config.GOOGLE_REDIRECT_URI
+                redirect_uri=config.GOOGLE_REDIRECT_URIS
             )
             
             flow.fetch_token(code=code)

@@ -15,7 +15,7 @@ def get_environment_config():
             "SERVICE_API_BASE_URL": f"https://{railway_domain}/api",
             "FRONTEND_URL": f"https://{railway_domain}",
             "ALLOWED_ORIGINS": [f"https://{railway_domain}", "*"],
-            "GOOGLE_REDIRECT_URI": f"https://{railway_domain}/api/oauth2callback"
+            "GOOGLE_REDIRECT_URIS": f"https://{railway_domain}/api/oauth2callback"
         }
     
     # Check for Vercel
@@ -25,7 +25,7 @@ def get_environment_config():
             "SERVICE_API_BASE_URL": "https://knowledgehub-production-9572.up.railway.app/api",
             "FRONTEND_URL": "https://knowledgehub-production-9572.up.railway.app",
             "ALLOWED_ORIGINS": ["https://knowledgehub-production-9572.up.railway.app"],
-            "GOOGLE_REDIRECT_URI": "https://knowledgehub-production-9572.up.railway.app/api/oauth2callback"
+            "GOOGLE_REDIRECT_URIS": "https://knowledgehub-production-9572.up.railway.app/api/oauth2callback"
         }
     
     # Local development (default)
@@ -33,7 +33,7 @@ def get_environment_config():
         "SERVICE_API_BASE_URL": "http://localhost:8000/api",
         "FRONTEND_URL": "http://localhost:5500",
         "ALLOWED_ORIGINS": ["http://localhost:5500", "http://127.0.0.1:5500", "*"],
-        "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/oauth2callback"
+        "GOOGLE_REDIRECT_URIS": "http://localhost:8000/api/oauth2callback"
     }
 
 
@@ -84,7 +84,7 @@ GOOGLE_TOKEN_URI = os.getenv("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/
 GOOGLE_AUTH_PROVIDER_CERT_URL = os.getenv("GOOGLE_AUTH_PROVIDER_CERT_URL", "https://www.googleapis.com/oauth2/v1/certs")
 
 # Redirect URI - Use environment-specific redirect URI
-GOOGLE_REDIRECT_URI = env_config["GOOGLE_REDIRECT_URI"]
+GOOGLE_REDIRECT_URIS = env_config["GOOGLE_REDIRECT_URIS"]
 
 # OAuth Scopes
 SCOPES = os.getenv(
@@ -136,6 +136,6 @@ if __name__ == "__main__":
     print(f"Environment: {'Railway' if os.getenv('RAILWAY_ENVIRONMENT_NAME') else 'production' if os.getenv('VERCEL_ENV') == 'production' else 'development'}")
     print(f"API Base URL: {SERVICE_API_BASE_URL}")
     print(f"Frontend URL: {FRONTEND_URL}")
-    print(f"Redirect URI: {GOOGLE_REDIRECT_URI}")
+    print(f"Redirect URI: {GOOGLE_REDIRECT_URIS}")
     print(f"Allowed Origins: {ALLOWED_ORIGINS}")
     print(f"Database URL: {MYSQL_DATABASE_URL}")

@@ -119,7 +119,7 @@ async def root():
         "environment": os.getenv("VERCEL_ENV", "local"),
         "api_base_url": config.SERVICE_API_BASE_URL,
         "frontend_url": config.FRONTEND_URL,
-        "redirect_uri": config.GOOGLE_REDIRECT_URI,
+        "redirect_uri": config.GOOGLE_REDIRECT_URIS,
         "status": "running"
     }
 
@@ -135,7 +135,7 @@ async def health():
         
         "simple_searcher_available": simple_searcher is not None,
         "doc_processor_available": doc_processor is not None,
-        "redirect_uri": config.GOOGLE_REDIRECT_URI
+        "redirect_uri": config.GOOGLE_REDIRECT_URIS
     }
 
 
@@ -282,8 +282,8 @@ async def google_auth():
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
-        print(f"🔗 Generating auth URL with redirect URI: {config.GOOGLE_REDIRECT_URI}")
-        auth_url, state = drive_client.get_authorization_url(config.GOOGLE_REDIRECT_URI)
+        print(f"🔗 Generating auth URL with redirect URI: {config.GOOGLE_REDIRECT_URIS}")
+        auth_url, state = drive_client.get_authorization_url(config.GOOGLE_REDIRECT_URIS)
         return {"auth_url": auth_url}
     except Exception as e:
         print(f"❌ Error in google_auth: {e}")
@@ -297,8 +297,8 @@ async def oauth2callback(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
-        print(f"🔗 Exchanging code with redirect URI: {config.GOOGLE_REDIRECT_URI}")
-        drive_client.exchange_code_for_credentials(code, config.GOOGLE_REDIRECT_URI)
+        print(f"🔗 Exchanging code with redirect URI: {config.GOOGLE_REDIRECT_URIS}")
+        drive_client.exchange_code_for_credentials(code, config.GOOGLE_REDIRECT_URIS)
         
         # ✅ AUTO-SYNC: Trigger database sync after successful authentication
         print("🔄 Auto-syncing database after authentication...")
@@ -597,7 +597,7 @@ async def debug_oauth_config():
     """Debug OAuth configuration"""
     return {
         "environment": os.getenv("VERCEL_ENV", "local"),
-        "redirect_uri": config.GOOGLE_REDIRECT_URI,
+        "redirect_uri": config.GOOGLE_REDIRECT_URIS,
         "api_base_url": config.SERVICE_API_BASE_URL,
         "frontend_url": config.FRONTEND_URL,
         "drive_authenticated": drive_client.creds is not None if drive_client else False
