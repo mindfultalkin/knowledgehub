@@ -162,4 +162,5 @@ if __name__ == "__main__":
     else:
         print("⚠️  Tesseract OCR not found - OCR features will be limited")
     
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, log_level="info", reload=False)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, )

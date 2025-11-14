@@ -32,3 +32,7 @@ pandas>=2.0.0  # Changed: will get latest compatible version
 packaging>=21.0
 cachetools>=4.2.0
 rsa>=4.7
+
+# Add these to your requirements.txt:
+faiss-cpu==1.7.4
+nltk==3.8.1

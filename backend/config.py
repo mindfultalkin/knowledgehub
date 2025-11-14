@@ -5,8 +5,21 @@ from urllib.parse import quote_plus
 
 def get_environment_config():
     """Get configuration based on environment"""
-    is_production = os.getenv("VERCEL_ENV") == "production"
+    # Check for Railway environment
+    is_railway = os.getenv("RAILWAY_ENVIRONMENT") is not None
+    railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
     
+    if is_railway and railway_domain:
+        # Railway deployment
+        return {
+            "SERVICE_API_BASE_URL": f"https://{railway_domain}/api",
+            "FRONTEND_URL": f"https://{railway_domain}",
+            "ALLOWED_ORIGINS": [f"https://{railway_domain}", "*"],
+            "GOOGLE_REDIRECT_URI": f"https://{railway_domain}/api/oauth2callback"
+        }
+    
+    # Check for Vercel
+    is_production = os.getenv("VERCEL_ENV") == "production"
     if is_production:
         return {
             "SERVICE_API_BASE_URL": "https://knowledgehub-eta.vercel.app/api",
@@ -14,14 +27,15 @@ def get_environment_config():
             "ALLOWED_ORIGINS": ["https://knowledgehub-eta.vercel.app"],
             "GOOGLE_REDIRECT_URI": "https://knowledgehub-eta.vercel.app/api/oauth2callback"
         }
-    else:
-        # Local development
-        return {
-            "SERVICE_API_BASE_URL": "http://localhost:8000/api",
-            "FRONTEND_URL": "http://localhost:5500",
-            "ALLOWED_ORIGINS": ["http://localhost:5500", "http://127.0.0.1:5500"],
-            "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/oauth2callback"
-        }
+    
+    # Local development (default)
+    return {
+        "SERVICE_API_BASE_URL": "http://localhost:8000/api",
+        "FRONTEND_URL": "http://localhost:5500",
+        "ALLOWED_ORIGINS": ["http://localhost:5500", "http://127.0.0.1:5500", "*"],
+        "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/oauth2callback"
+    }
+
 
 
 # Load environment variables from the .env file

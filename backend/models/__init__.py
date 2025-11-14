@@ -32,7 +32,7 @@ __all__ = [
     'VectorEmbedding',
     'AccessControl',
     'ProcessingQueue',
-    'SyncCheckpoint'
+    'SyncCheckpoint',
     'DocumentClause',
     'ClauseLibrary'
 ]
