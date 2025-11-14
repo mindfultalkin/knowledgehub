@@ -37,15 +37,12 @@ def get_environment_config():
     }
 
 
-
 # Load environment variables from the .env file
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path=env_path)
 
-
 # Load environment config
 env_config = get_environment_config()
-
 
 # ============================================================
 # MYSQL DATABASE CONFIGURATION
@@ -81,16 +78,13 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
-
 # OAuth URIs
 GOOGLE_AUTH_URI = os.getenv("GOOGLE_AUTH_URI", "https://accounts.google.com/o/oauth2/auth")
 GOOGLE_TOKEN_URI = os.getenv("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token")
 GOOGLE_AUTH_PROVIDER_CERT_URL = os.getenv("GOOGLE_AUTH_PROVIDER_CERT_URL", "https://www.googleapis.com/oauth2/v1/certs")
 
-
 # Redirect URI - Use environment-specific redirect URI
 GOOGLE_REDIRECT_URI = env_config["GOOGLE_REDIRECT_URI"]
-
 
 # OAuth Scopes
 SCOPES = os.getenv(
@@ -98,25 +92,21 @@ SCOPES = os.getenv(
     "https://www.googleapis.com/auth/drive.readonly,https://www.googleapis.com/auth/drive.metadata.readonly"
 ).split(",")
 
-
 # ----------------------------------------------------
 # Server & Application Configuration
 # ----------------------------------------------------
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8000))
 
-
 # Use environment-specific URLs
 SERVICE_API_BASE_URL = env_config["SERVICE_API_BASE_URL"]
 FRONTEND_URL = env_config["FRONTEND_URL"]
-
 
 # ----------------------------------------------------
 # CORS Configuration
 # ----------------------------------------------------
 # Use environment-specific allowed origins
 ALLOWED_ORIGINS = env_config["ALLOWED_ORIGINS"]
-
 
 # ----------------------------------------------------
 # Token Info (for loading existing credentials)
@@ -125,25 +115,14 @@ GOOGLE_ACCESS_TOKEN = os.getenv("GOOGLE_ACCESS_TOKEN", "")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
 GOOGLE_TOKEN_EXPIRY = os.getenv("GOOGLE_TOKEN_EXPIRY", "")
 
-
 # ----------------------------------------------------
-# NLP Search Configuration
-# ----------------------------------------------------
-NLP_MODEL_PATH = os.getenv("NLP_MODEL_PATH", "models/nlp_search_model.pkl")
-INDEX_PATH = os.getenv("INDEX_PATH", "models/faiss_index")
-EMBEDDINGS_PATH = os.getenv("EMBEDDINGS_PATH", "models/embeddings.npy")
-
-
-# ----------------------------------------------------
-# Model Storage Directory
+# Model Storage Directory (Keep for clause extraction models)
 # ----------------------------------------------------
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
-
 
 # Create models directory if it doesn't exist
 if not os.path.exists(MODELS_DIR):
     os.makedirs(MODELS_DIR)
-
 
 # ----------------------------------------------------
 # Validation
@@ -152,10 +131,9 @@ if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
     print("⚠️  WARNING: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set in .env file!")
     print("Please check your .env configuration.")
 
-
 # Debug information
 if __name__ == "__main__":
-    print(f"Environment: {'production' if os.getenv('VERCEL_ENV') == 'production' else 'development'}")
+    print(f"Environment: {'Railway' if os.getenv('RAILWAY_ENVIRONMENT') else 'production' if os.getenv('VERCEL_ENV') == 'production' else 'development'}")
     print(f"API Base URL: {SERVICE_API_BASE_URL}")
     print(f"Frontend URL: {FRONTEND_URL}")
     print(f"Redirect URI: {GOOGLE_REDIRECT_URI}")

@@ -13,7 +13,6 @@ from database import get_db
 # Then import other modules
 from google_drive import GoogleDriveClient
 from tagging import SimpleTagger
-from nlp_search import NLPSearchEngine
 from document_processor import DocumentProcessor
 from simple_search import SimpleTextSearch
 from services.drive_ingestion import DriveIngestionService
@@ -54,7 +53,7 @@ try:
     drive_client = GoogleDriveClient()
     tagger = SimpleTagger()
     doc_processor = DocumentProcessor(drive_client)
-    nlp_engine = NLPSearchEngine()
+    
     simple_searcher = SimpleTextSearch(drive_client)
     
     if os.getenv("VERCEL_ENV") != "production":
@@ -67,7 +66,7 @@ except Exception as e:
     drive_client = None
     tagger = None
     doc_processor = None
-    nlp_engine = None
+    
     simple_searcher = None
 
 
@@ -133,7 +132,7 @@ async def health():
         "GOOGLE_CLIENT_ID_loaded": bool(os.getenv("GOOGLE_CLIENT_ID")),
         "drive_client_available": drive_client is not None,
         "tagger_available": tagger is not None,
-        "nlp_engine_available": nlp_engine is not None,
+        
         "simple_searcher_available": simple_searcher is not None,
         "doc_processor_available": doc_processor is not None,
         "redirect_uri": config.GOOGLE_REDIRECT_URI
@@ -503,140 +502,8 @@ async def get_all_tags():
     }
 
 
-# ==================== NLP ROUTES ====================
 
 
-@router.post("/nlp/train")
-async def train_nlp_model(db: Session = Depends(get_db)):
-    """Train NLP model from DATABASE (not live Google Drive)"""
-    try:
-        print("🔄 Starting NLP training from database...")
-        
-        if not drive_client or not drive_client.creds:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        
-        if not nlp_engine:
-            raise HTTPException(status_code=500, detail="NLP engine not initialized")
-        
-        # Get current user
-        current_user = None
-        try:
-            about = drive_client.service.about().get(fields='user').execute()
-            current_user = about['user']['emailAddress']
-            print(f"📧 Training for user: {current_user}")
-        except Exception as e:
-            print(f"⚠️ Could not get user: {e}")
-        
-        # Get documents from DATABASE for current user
-        if current_user:
-            documents = db.query(Document).filter(
-                Document.account_email == current_user
-            ).all()
-        else:
-            documents = db.query(Document).all()
-        
-        print(f"📄 Found {len(documents)} documents in database")
-        
-        if not documents:
-            return {"message": "No documents found", "documents_processed": 0}
-        
-        # Prepare documents for NLP
-        doc_list = []
-        for doc in documents:
-            doc_list.append({
-                'id': doc.id,
-                'name': doc.title,
-                'content': doc.title,  # Use title as content
-                'mimeType': doc.mime_type or '',
-                'owner': doc.owner_name or 'Unknown',
-                'modifiedTime': doc.modified_at.isoformat() if doc.modified_at else '',
-                'webViewLink': doc.file_url or '',
-                'size': str(doc.size_bytes) if doc.size_bytes else '0'
-            })
-        
-        # Train NLP model
-        print("🤖 Training NLP model with embeddings...")
-        nlp_engine.create_embeddings(doc_list)
-        
-        # Save model
-        model_path = os.path.join(config.MODELS_DIR, "nlp_search_model.pkl")
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        nlp_engine.save_model(model_path)
-        
-        print("🎉 NLP training completed!")
-        
-        return {
-            "message": "NLP model trained successfully",
-            "documents_processed": len(doc_list)
-        }
-        
-    except Exception as e:
-        print(f"❌ Training failed: {e}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-@router.get("/nlp/search")
-async def nlp_search(query: str, top_k: int = 10):
-    """Search using NLP semantic search"""
-    try:
-        if not drive_client or not drive_client.creds:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        
-        if not nlp_engine:
-            raise HTTPException(status_code=500, detail="NLP engine not initialized")
-        
-        if not nlp_engine.is_trained:
-            # Try to load existing model
-            model_path = os.path.join(config.MODELS_DIR, "nlp_search_model.pkl")
-            if os.path.exists(model_path):
-                nlp_engine.load_model(model_path)
-            else:
-                raise HTTPException(status_code=400, detail="NLP model not trained. Please train first.")
-        
-        # Perform search
-        results = nlp_engine.search(query, top_k)
-        
-        # Format results for frontend
-        formatted_results = []
-        for result in results:
-            doc = result['document']
-            formatted_results.append({
-                'id': doc['id'],
-                'name': doc['name'],
-                'mimeType': doc.get('mimeType', ''),
-                'score': result['score'],
-                'relevance': result['relevance'],
-                'snippet': doc.get('content', '')[:200] + '...' if doc.get('content') else '',
-                'owner': doc.get('owner', 'Unknown'),
-                'modifiedTime': doc.get('modifiedTime', ''),
-                'webViewLink': doc.get('webViewLink', ''),
-                'size': doc.get('size', '0')
-            })
-        
-        return {
-            "query": query,
-            "results": formatted_results,
-            "total_results": len(formatted_results)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-
-@router.get("/nlp/status")
-async def nlp_status():
-    """Get NLP model status"""
-    if not nlp_engine:
-        return {"is_trained": False, "error": "NLP engine not initialized"}
-    
-    return {
-        "is_trained": nlp_engine.is_trained,
-        "documents_indexed": len(nlp_engine.documents) if nlp_engine.is_trained else 0,
-        "model_ready": nlp_engine.is_trained
-    }
 
 
 # ==================== SIMPLE SEARCH ROUTES ====================
@@ -698,118 +565,6 @@ async def simple_text_search(query: str, db: Session = Depends(get_db)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Simple search failed: {str(e)}")
 
-
-
-@router.get("/search/ai")
-async def ai_semantic_search(query: str, top_k: int = 10, db: Session = Depends(get_db)):
-    """AI semantic search - Uses ONLY database data"""
-    try:
-        if not drive_client or not drive_client.creds:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        
-        if not nlp_engine:
-            raise HTTPException(status_code=500, detail="NLP engine not initialized")
-        
-        if not nlp_engine.is_trained:
-            model_path = os.path.join(config.MODELS_DIR, "nlp_search_model.pkl")
-            if os.path.exists(model_path):
-                nlp_engine.load_model(model_path)
-            else:
-                raise HTTPException(status_code=400, detail="NLP model not trained")
-        
-        current_user = None
-        try:
-            about = drive_client.service.about().get(fields='user').execute()
-            current_user = about['user']['emailAddress']
-            print(f"🤖 AI search for user: {current_user}")
-        except Exception as e:
-            return {"query": query, "results": []}
-        
-        # Get user's documents from DATABASE
-        user_documents = db.query(Document).filter(
-            Document.account_email == current_user
-        ).all()
-        
-        if not user_documents:
-            return {"query": query, "results": [], "total_results": 0}
-        
-        print(f"📊 User has {len(user_documents)} documents in database")
-        
-        # Create lookup dictionary
-        doc_lookup = {doc.id: doc for doc in user_documents}
-        
-        # Get NLP search results
-        all_results = nlp_engine.search(query, top_k * 3)
-        
-        formatted_results = []
-        for result in all_results:
-            nlp_doc = result['document']
-            doc_id = nlp_doc['id']
-            
-            # ✅ Only include if in database and belongs to current user
-            if doc_id not in doc_lookup:
-                continue
-            
-            # ✅ Get data from DATABASE (fresh, correct data)
-            db_doc = doc_lookup[doc_id]
-            
-            # ✅ FIX: Get the actual score from NLP results
-            score = result.get('score', 0)
-            
-            # ✅ NORMALIZE the score to be between 0 and 1
-            # NLP scores can vary widely, so we normalize them
-            normalized_score = min(max(score, 0), 1)  # Ensure between 0-1
-            
-            # Calculate percentage
-            percentage = round(normalized_score * 100, 1)
-            
-            # ✅ FIX: Better relevance calculation based on normalized score
-            if normalized_score >= 0.8:
-                relevance_level = 'Very High'
-            elif normalized_score >= 0.6:
-                relevance_level = 'High'
-            elif normalized_score >= 0.4:
-                relevance_level = 'Medium'
-            elif normalized_score >= 0.2:
-                relevance_level = 'Low'
-            else:
-                relevance_level = 'Very Low'
-            
-            print(f"✅ {db_doc.title} - Score: {score}, Normalized: {normalized_score}, Percentage: {percentage}% ({relevance_level})")
-            
-            # ✅ Use DATABASE document data with proper scores
-            formatted_results.append({
-                'id': db_doc.id,
-                'name': db_doc.title,
-                'mimeType': db_doc.mime_type or 'application/octet-stream',
-                'score': normalized_score,  # ✅ Use normalized score for percentage
-                'relevance': relevance_level,
-                'owner': db_doc.owner_name or 'Unknown',
-                'modifiedTime': db_doc.modified_at.isoformat() if db_doc.modified_at else '',
-                'webViewLink': db_doc.file_url or '#',
-                'size': str(db_doc.size_bytes) if db_doc.size_bytes else '0',
-                'snippet': f"AI Match: {percentage}% - {relevance_level} relevance",
-                'search_type': 'ai_semantic'
-            })
-        
-        # Sort by score (highest first) and take top_k
-        formatted_results.sort(key=lambda x: x['score'], reverse=True)
-        formatted_results = formatted_results[:top_k]
-        
-        print(f"🎯 Returning {len(formatted_results)} results with proper scores")
-        
-        return {
-            "query": query,
-            "results": formatted_results,
-            "total_results": len(formatted_results),
-            "search_type": "ai_semantic"
-        }
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 
