@@ -291,45 +291,43 @@ async def google_auth():
 
 
 @router.get("/oauth2callback")
-async def oauth2callback(code: str, db: Session = Depends(get_db)):
-    """OAuth callback - Automatically triggers database sync after authentication"""
+async def oauth2callback(code: str, state: str = None):
+    """OAuth callback - FIXED: Database is now optional"""
     if not drive_client:
         raise HTTPException(status_code=500, detail="Drive client not initialized")
     
     try:
         print(f"🔗 Exchanging code with redirect URI: {config.GOOGLE_REDIRECT_URIS}")
         drive_client.exchange_code_for_credentials(code, config.GOOGLE_REDIRECT_URIS)
+        print("✅ OAuth credentials obtained successfully")
         
-        # ✅ AUTO-SYNC: Trigger database sync after successful authentication
-        print("🔄 Auto-syncing database after authentication...")
+        # Try database sync, but don't fail if database is unavailable
         try:
+            from database import get_db_context
             from services.drive_ingestion import DriveIngestionService
-            ingestion_service = DriveIngestionService(drive_client, db)
-            stats = ingestion_service.sync_all_files()
-            print(f"✅ Auto-sync completed: {stats}")
+            
+            print("🔄 Attempting auto-sync...")
+            with get_db_context() as db:
+                ingestion_service = DriveIngestionService(drive_client, db)
+                stats = ingestion_service.sync_all_files()
+                print(f"✅ Auto-sync completed: {stats}")
+                
+            # Trigger clause extraction
+            print("🔄 Triggering clause extraction...")
+            asyncio.create_task(trigger_post_auth_extraction())
+            
         except Exception as sync_error:
-            print(f"⚠️ Auto-sync failed: {sync_error}")
-            # Don't fail authentication if sync fails
+            print(f"⚠️ Auto-sync failed (non-critical): {sync_error}")
+            # Continue anyway - user is authenticated
         
-        # ✅ NEW: Trigger clause extraction after auth
-        print("🔄 Triggering clause extraction...")
-        asyncio.create_task(trigger_post_auth_extraction())
+        return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=success")
         
-        return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=success&synced=true")
     except Exception as e:
-        print(f"❌ Error in oauth2callback: {e}")
+        print(f"❌ OAuth callback error: {e}")
+        import traceback
+        traceback.print_exc()
         return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=error&message={str(e)}")
 
-
-async def trigger_post_auth_extraction():
-    """
-    Trigger clause extraction after user authenticates
-    """
-    import asyncio
-    from main import auto_extract_clauses_on_startup
-    
-    await asyncio.sleep(3)  # Wait 3 seconds for sync to complete
-    await auto_extract_clauses_on_startup()
 
 
 

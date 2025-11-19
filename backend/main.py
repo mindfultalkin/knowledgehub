@@ -56,19 +56,21 @@ if os.path.exists(frontend_path):
 
 # Health check with database status
 @app.get("/health")
-async def health_check(db: Session = Depends(get_db)):
-    try:
-        # Test database connection
-        db.execute("SELECT 1")
-        db_status = "healthy"
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
+async def health_check():
+    """Health check endpoint"""
+    from database import test_connection, MYSQL_HOST, MYSQL_DATABASE
+    
+    db_ok = test_connection()
     
     return {
-        "status": "healthy", 
-        "service": "Knowledge Hub API",
-        "database": db_status
+        "status": "online",
+        "database": {
+            "connected": db_ok,
+            "host": MYSQL_HOST,
+            "database": MYSQL_DATABASE
+        }
     }
+
 
 # Simple health check without database dependency
 @app.get("/ready")
