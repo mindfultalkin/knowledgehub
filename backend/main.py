@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import os
 import sys
@@ -42,18 +41,6 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 
 
-# ✅ FRONTEND SERVING (AFTER API ROUTES)
-frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
-if os.path.exists(frontend_path):
-    # Mount static files
-    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
-    
-    @app.get("/", include_in_schema=False)
-    async def serve_root():
-        """Serve frontend index.html at root"""
-        return FileResponse(os.path.join(frontend_path, 'index.html'))
-
-
 # Health check with database status
 @app.get("/health")
 async def health_check():
@@ -78,63 +65,6 @@ async def readiness_check():
     return {"status": "ready", "service": "Knowledge Hub API"}
 
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    Run initialization tasks on startup
-    """
-    print("🚀 Starting Knowledge Hub Application...")
-    
-    # Initialize database
-    db_success = init_database()
-    
-    if db_success:
-        print("✅ Database initialized successfully")
-        # Schedule background tasks only if database is available
-        asyncio.create_task(auto_extract_clauses_on_startup())
-    else:
-        print("⚠️  Application starting without database connection")
-
-
-async def auto_extract_clauses_on_startup():
-    """
-    Background task to automatically extract clauses from all documents
-    """
-    await asyncio.sleep(10)  # Wait 10 seconds after startup
-    
-    # Skip auto-extraction in Railway to avoid cold start issues
-    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        print("🚇 Railway environment detected - skipping auto extraction on startup")
-        return
-        
-    try:
-        print("\n🔄 Starting automatic clause extraction...")
-        
-        # Import here to avoid circular imports
-        from services.clause_extractor import ClauseExtractor
-        from services.universal_content_extractor import UniversalContentExtractor
-        from api import drive_client
-        
-        # Check if database is available
-        if not SessionLocal:
-            print("❌ Database not available. Skipping auto-extraction.")
-            return
-            
-        # Create database session
-        db = SessionLocal()
-        
-        try:
-            # Your existing auto-extraction code here...
-            print("✅ Auto-extraction completed")
-        finally:
-            db.close()
-            
-    except Exception as e:
-        print(f"❌ Auto-extraction error: {e}")
-        import traceback
-        traceback.print_exc()
-
-
 @app.get("/debug/env")
 async def debug_environment():
     """Debug endpoint to see all Railway environment variables"""
@@ -143,7 +73,6 @@ async def debug_environment():
         if 'RAILWAY' in key.upper():
             railway_vars[key] = value
     
-    # Also check other deployment indicators
     other_vars = {
         'PORT': os.getenv('PORT'),
         'DATABASE_URL': os.getenv('DATABASE_URL'),
@@ -178,11 +107,82 @@ async def debug_database():
         return {"error": str(e)}
 
 
+# ✅ FRONTEND SERVING (AFTER ALL OTHER ROUTES)
+frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+if os.path.exists(frontend_path):
+    
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        """Serve frontend index.html at root"""
+        return FileResponse(os.path.join(frontend_path, 'index.html'))
+    
+    @app.get("/{file_path:path}", include_in_schema=False)
+    async def serve_static(file_path: str):
+        """Serve static frontend files"""
+        # Don't serve for API/system routes
+        if file_path.startswith(('api/', 'docs', 'health', 'ready', 'debug', 'openapi')):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        file_full_path = os.path.join(frontend_path, file_path)
+        
+        # Check if file exists
+        if os.path.exists(file_full_path) and os.path.isfile(file_full_path):
+            return FileResponse(file_full_path)
+        
+        # If not found, return index.html for SPA routing
+        return FileResponse(os.path.join(frontend_path, 'index.html'))
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Run initialization tasks on startup"""
+    print("🚀 Starting Knowledge Hub Application...")
+    
+    db_success = init_database()
+    
+    if db_success:
+        print("✅ Database initialized successfully")
+        asyncio.create_task(auto_extract_clauses_on_startup())
+    else:
+        print("⚠️  Application starting without database connection")
+
+
+async def auto_extract_clauses_on_startup():
+    """Background task to automatically extract clauses from all documents"""
+    await asyncio.sleep(10)
+    
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+        print("🚇 Railway environment detected - skipping auto extraction on startup")
+        return
+        
+    try:
+        print("\n🔄 Starting automatic clause extraction...")
+        
+        from services.clause_extractor import ClauseExtractor
+        from services.universal_content_extractor import UniversalContentExtractor
+        from api import drive_client
+        
+        if not SessionLocal:
+            print("❌ Database not available. Skipping auto-extraction.")
+            return
+            
+        db = SessionLocal()
+        
+        try:
+            print("✅ Auto-extraction completed")
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"❌ Auto-extraction error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 # For local development
 if __name__ == "__main__":
     import uvicorn
     
-    # Check for Tesseract OCR
     try:
         import subprocess
         subprocess.run(["tesseract", "--version"], capture_output=True, check=True)
@@ -190,7 +190,6 @@ if __name__ == "__main__":
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("⚠️  Tesseract OCR not found - OCR features will be limited")
     
-    # Check if credentials already loaded
     from api import drive_client
     if drive_client and drive_client.creds:
         print("✅ Google Drive credentials already loaded")
