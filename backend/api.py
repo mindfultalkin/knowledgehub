@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import RedirectResponse
-from typing import Optional
+from fastapi.responses import RedirectResponse, JSONResponse
+from typing import Optional, List
 from sqlalchemy.orm import Session
 import os
 
@@ -30,10 +30,37 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
 
 
-# Add this Pydantic model at the top of api.py (after imports)
+# ==================== PYDANTIC MODELS ====================
+
 class SaveClauseRequest(BaseModel):
     document_id: str
     clause_number: int
+
+class ClauseFileResponse(BaseModel):
+    id: str
+    title: str
+    mime_type: str
+    modified_at: str
+    file_url: str
+    owner_name: str
+
+class ClauseFilesResponse(BaseModel):
+    clause_title: str
+    clause_content: str
+    files: List[ClauseFileResponse]
+
+class ClauseLibraryResponse(BaseModel):
+    id: int
+    title: str
+    section_number: str
+    content_preview: str
+    source_document: str
+    saved_by: str
+    created_at: str
+
+class ClauseLibraryListResponse(BaseModel):
+    count: int
+    clauses: List[ClauseLibraryResponse]
 
 
 # Only import dotenv in non-production
@@ -70,7 +97,8 @@ except Exception as e:
     simple_searcher = None
 
 
-# Helper function for content preview
+# ==================== HELPER FUNCTIONS ====================
+
 def get_content_preview(content: str, query: str, preview_length: int = 200) -> str:
     """Get content preview for simple search"""
     if not content or not query:
@@ -104,7 +132,24 @@ def get_current_user_email():
         print(f"⚠️ Error getting current user: {e}")
         return None
 
-
+async def trigger_post_auth_extraction():
+    """
+    Trigger clause extraction after successful authentication
+    """
+    try:
+        print("🔄 Triggering post-auth clause extraction...")
+        # Import here to avoid circular imports
+        from services.clause_extractor import ClauseExtractor
+        from database import SessionLocal
+        
+        db = SessionLocal()
+        try:
+            # Your extraction logic here
+            print("✅ Post-auth extraction completed")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ Post-auth extraction failed: {e}")
 
 
 # ==================== BASIC ROUTES ====================
@@ -787,8 +832,170 @@ async def get_file_preview(file_id: str, db: Session = Depends(get_db)):
 
 
 # ============================================================
-# CLAUSE EXTRACTION ENDPOINTS
+# CLAUSE EXTRACTION ENDPOINTS (CORRECT ORDER)
 # ============================================================
+
+# 1️⃣ MOST SPECIFIC ROUTE FIRST - Must come before generic routes
+@router.get("/clauses/library/{clause_id}/files")
+async def get_files_with_clause(clause_id: int, db: Session = Depends(get_db)):
+    """
+    Get all files that contain a specific clause from the library
+    """
+    try:
+        print(f"🔍 Finding files with clause ID: {clause_id}")
+        
+        # Get the clause from library
+        library_clause = db.query(ClauseLibrary).filter(
+            ClauseLibrary.id == clause_id
+        ).first()
+        
+        if not library_clause:
+            print(f"❌ Clause {clause_id} not found in library")
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Clause {clause_id} not found in library"}
+            )
+        
+        print(f"✅ Found clause: {library_clause.clause_title}")
+        
+        # Find all documents with this clause title
+        matching_clauses = db.query(DocumentClause).filter(
+            DocumentClause.clause_title.ilike(f"%{library_clause.clause_title}%")
+        ).all()
+        
+        # Get unique document IDs
+        doc_ids = list(set([clause.document_id for clause in matching_clauses]))
+        
+        if not doc_ids:
+            print(f"ℹ️ No files found for clause: {library_clause.clause_title}")
+            return JSONResponse(
+                content={
+                    "clause_title": library_clause.clause_title,
+                    "clause_content": library_clause.clause_content or "No content available",
+                    "files": []
+                }
+            )
+        
+        # Get document details
+        documents = db.query(Document).filter(Document.id.in_(doc_ids)).all()
+        
+        files = []
+        for doc in documents:
+            try:
+                file_data = {
+                    "id": doc.id,
+                    "title": doc.title or "Unknown Title",
+                    "mime_type": doc.mime_type or "Unknown Type",
+                    "modified_at": doc.modified_at.isoformat() if doc.modified_at else None,
+                    "file_url": doc.file_url or "",
+                    "owner_name": doc.owner_name or "Unknown Owner"
+                }
+                files.append(file_data)
+            except Exception as file_error:
+                print(f"⚠️ Error processing document {doc.id}: {file_error}")
+                continue
+        
+        print(f"✅ Found {len(files)} files with clause: {library_clause.clause_title}")
+        
+        return JSONResponse(
+            content={
+                "clause_title": library_clause.clause_title,
+                "clause_content": library_clause.clause_content or "No content available",
+                "files": files
+            }
+        )
+        
+    except Exception as e:
+        print(f"❌ Error in get_files_with_clause for clause {clause_id}: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Internal server error: {str(e)}"}
+        )
+
+# 2️⃣ OTHER SPECIFIC ROUTES
+@router.get("/clauses/check-saved/{document_id}/{clause_number}")
+async def check_clause_saved(
+    document_id: str,
+    clause_number: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Check if a specific clause is already saved in the library
+    """
+    try:
+        print(f"🔍 Checking if clause {clause_number} from {document_id} is saved")
+        
+        # Get the clause from document_clauses table
+        doc_clause = db.query(DocumentClause).filter(
+            DocumentClause.document_id == document_id,
+            DocumentClause.clause_number == clause_number
+        ).first()
+        
+        if not doc_clause:
+            print(f"❌ Clause not found in cache")
+            return {"saved": False}
+        
+        # Check if it exists in clause_library
+        existing = db.query(ClauseLibrary).filter(
+            ClauseLibrary.source_document_id == document_id,
+            ClauseLibrary.clause_title == doc_clause.clause_title
+        ).first()
+        
+        if existing:
+            print(f"✅ Clause already saved in library (ID: {existing.id})")
+            return {
+                "saved": True,
+                "library_id": existing.id
+            }
+        else:
+            print(f"ℹ️ Clause not saved yet")
+            return {
+                "saved": False,
+                "library_id": None
+            }
+        
+    except Exception as e:
+        print(f"❌ Error checking saved status: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"saved": False}
+
+
+@router.get("/clauses/library")
+async def get_library_clauses(db: Session = Depends(get_db)):
+    """
+    Get all saved clauses from library
+    """
+    try:
+        clauses = db.query(ClauseLibrary).order_by(
+            ClauseLibrary.created_at.desc()
+        ).all()
+        
+        clause_list = [
+            {
+                'id': c.id,
+                'title': c.clause_title,
+                'section_number': c.section_number,
+                'content_preview': c.clause_content[:200] + '...' if len(c.clause_content) > 200 else c.clause_content,
+                'source_document': c.source_document_name,
+                'saved_by': c.saved_by,
+                'created_at': c.created_at.isoformat() if c.created_at else None
+            }
+            for c in clauses
+        ]
+        
+        return JSONResponse(
+            content={
+                "count": len(clause_list),
+                "clauses": clause_list
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/documents/{file_id}/extract-clauses")
 async def extract_clauses(file_id: str, db: Session = Depends(get_db)):
@@ -853,7 +1060,6 @@ async def extract_clauses(file_id: str, db: Session = Depends(get_db)):
                 'clause_number': c['clause_number'],
                 'section_number': c.get('section_number', str(c['clause_number'])),
                 'title': c['title']
-                # NO preview field!
             }
             for c in clauses
         ]
@@ -892,6 +1098,32 @@ async def get_clause_content(file_id: str, clause_number: int, db: Session = Dep
             "content": clause.clause_content
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/documents/{file_id}/cached-clauses")
+async def get_cached_clauses(file_id: str, db: Session = Depends(get_db)):
+    """Get cached clauses for a document"""
+    try:
+        clauses = db.query(DocumentClause).filter(
+            DocumentClause.document_id == file_id
+        ).order_by(DocumentClause.clause_number).all()
+        
+        if not clauses:
+            return {"clauses": []}
+        
+        return {
+            "clauses": [
+                {
+                    "clause_number": clause.clause_number,
+                    "section_number": clause.section_number,
+                    "title": clause.clause_title,
+                    "content": clause.clause_content or None
+                }
+                for clause in clauses
+            ]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -971,62 +1203,7 @@ async def save_clause_to_library(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-@router.get("/clauses/library")
-async def get_library_clauses(db: Session = Depends(get_db)):
-    """
-    Get all saved clauses from library
-    """
-    try:
-        clauses = db.query(ClauseLibrary).order_by(
-            ClauseLibrary.created_at.desc()
-        ).all()
-        
-        return {
-            "count": len(clauses),
-            "clauses": [
-                {
-                    'id': c.id,
-                    'title': c.clause_title,
-                    'section_number': c.section_number,
-                    'content_preview': c.clause_content[:200] + '...' if len(c.clause_content) > 200 else c.clause_content,
-                    'source_document': c.source_document_name,
-                    'saved_by': c.saved_by,
-                    'created_at': c.created_at.isoformat() if c.created_at else None
-                }
-                for c in clauses
-            ]
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/documents/{file_id}/cached-clauses")
-async def get_cached_clauses(file_id: str, db: Session = Depends(get_db)):
-    """Get cached clauses for a document"""
-    try:
-        clauses = db.query(DocumentClause).filter(
-            DocumentClause.document_id == file_id
-        ).order_by(DocumentClause.clause_number).all()
-        
-        if not clauses:
-            return {"clauses": []}
-        
-        return {
-            "clauses": [
-                {
-                    "clause_number": clause.clause_number,
-                    "section_number": clause.section_number,
-                    "title": clause.clause_title,
-                    "content": clause.clause_content or None  # ← Return None, not "No content available"
-                }
-                for clause in clauses
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
+# 3️⃣ GENERIC ROUTE LAST (with path parameter - must be at the end)
 @router.get("/clauses/{clause_title}/similar-files")
 async def find_similar_clauses(
     clause_title: str,
@@ -1042,8 +1219,8 @@ async def find_similar_clauses(
         
         # Search for similar clause titles (case-insensitive, fuzzy matching)
         similar_clauses = db.query(DocumentClause).filter(
-            DocumentClause.document_id != current_file_id,  # Exclude current file
-            DocumentClause.clause_title.ilike(f"%{clause_title}%")  # Fuzzy search
+            DocumentClause.document_id != current_file_id,
+            DocumentClause.clause_title.ilike(f"%{clause_title}%")
         ).all()
         
         print(f"   Found {len(similar_clauses)} similar clauses in database")

@@ -962,49 +962,78 @@ function viewFile(file) {
         }
     }
 }
+function updateNavigation(view) {
+    // Remove active class from all nav links
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Add active class to current view
+    const activeLink = document.querySelector(`.nav-link[data-view="${view}"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
+    }
+}
 
 
 
 function navigateTo(view) {
-  appState.currentView = view;
-  
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.classList.remove('active');
-  });
-  const activeLink = document.querySelector(`[data-view="${view}"]`);
-  if (activeLink) {
-    activeLink.classList.add('active');
-  }
-  
-  renderCurrentView();
+    appState.currentView = view;
+    updateNavigation(view);
+    renderCurrentView();
 }
 
 function renderCurrentView() {
-  const mainContent = document.querySelector('.main-content');
-  if (!mainContent) return;
-  
-  let content = '';
-  switch (appState.currentView) {
-    case 'dashboard':
-      content = renderDashboard();
-      break;
-    case 'search':
-      content = renderSearch();
-      break;
-    case 'files':
-      content = renderFiles();
-      break;
-    case 'ai-tags':
-      content = renderAITags();
-      break;
-    case 'settings':
-      content = renderSettings();
-      break;
-  }
-  
-  mainContent.innerHTML = content;
-  attachFileCardListeners();
+    switch (appState.currentView) {
+        case 'dashboard':
+            showDashboard();
+            break;
+        case 'search':
+            showSearchView();
+            break;
+        case 'files':
+            showFilesView();
+            break;
+        case 'ai-tags':
+            showAITagsView();
+            break;
+        case 'clause-library':  // ← ADD THIS CASE
+            showClauseLibrary();
+            break;
+        case 'settings':
+            showSettingsView();
+            break;
+        default:
+            showDashboard();
+    }
 }
+// ============================================================
+// VIEW RENDERING FUNCTIONS (Wrappers for existing render functions)
+// ============================================================
+
+function showDashboard() {
+    document.querySelector('.main-content').innerHTML = renderDashboard();
+    attachFileCardListeners();
+}
+
+function showSearchView() {
+    document.querySelector('.main-content').innerHTML = renderSearch();
+    attachFileCardListeners();
+}
+
+function showFilesView() {
+    document.querySelector('.main-content').innerHTML = renderFiles();
+    attachFileCardListeners();
+}
+
+function showAITagsView() {
+    document.querySelector('.main-content').innerHTML = renderAITags();
+}
+
+function showSettingsView() {
+    document.querySelector('.main-content').innerHTML = renderSettings();
+}
+
 // ==================== ADD THESE NEW FUNCTIONS ====================
 
 // Search type selector
@@ -1678,7 +1707,7 @@ async function selectClause(clauseNumber) {
 /**
  * Display selected clause content
  */
-function displaySelectedClause(clause) {
+async function displaySelectedClause(clause) {
     const container = document.getElementById('selectedClauseContainer');
     const titleEl = document.getElementById('selectedClauseTitle');
     const contentEl = document.getElementById('selectedClauseContent');
@@ -1688,31 +1717,47 @@ function displaySelectedClause(clause) {
     // Show container
     container.style.display = 'block';
     
-    // Get clause data (try ALL possible property names!)
-    const clauseNumber = clause.section_number || clause.clause_number || clause.clauseNumber || clause.sectionNumber || '';
-    const clauseTitle = clause.title || clause.clause_title || clause.clauseTitle || 'Untitled Clause';
-    
-    // ← THIS IS THE KEY FIX - Try ALL possible content property names!
-    const clauseContent = clause.content || clause.clause_content || clause.clauseContent || clause.text || 'No content available';
-    
-    console.log('📝 Title:', clauseTitle);
-    console.log('📝 Content length:', clauseContent?.length || 0);
-    console.log('📝 Content preview:', clauseContent?.substring(0, 100));
+    // Get clause data
+    const clauseNumber = clause.section_number || clause.clause_number || '';
+    const clauseTitle = clause.title || clause.clause_title || 'Untitled Clause';
+    const clauseContent = clause.content || clause.clause_content || 'No content available';
     
     // Set content
     titleEl.textContent = `${clauseNumber}. ${clauseTitle}`;
     contentEl.textContent = clauseContent;
     
-    // Reset save button
+    // ✅ CHECK IF ALREADY SAVED
     const saveBtn = document.getElementById('saveToLibraryBtn');
     if (saveBtn) {
-        saveBtn.textContent = '💾 Save to Library';
-        saveBtn.classList.remove('saved');
-        saveBtn.disabled = false;
+        saveBtn.textContent = 'Checking...';
+        saveBtn.disabled = true;
+        
+        try {
+            const response = await fetch(
+                `${API_BASE_URL}/clauses/check-saved/${currentDocumentId}/${clause.clause_number}`
+            );
+            const data = await response.json();
+            
+            if (data.saved) {
+                // Already saved - show saved state
+                saveBtn.textContent = '✓ Saved to Library';
+                saveBtn.classList.add('saved');
+                saveBtn.disabled = true;
+            } else {
+                // Not saved - show save button
+                saveBtn.textContent = '💾 Save to Library';
+                saveBtn.classList.remove('saved');
+                saveBtn.disabled = false;
+            }
+        } catch (error) {
+            console.error('Error checking saved status:', error);
+            // On error, assume not saved
+            saveBtn.textContent = '💾 Save to Library';
+            saveBtn.classList.remove('saved');
+            saveBtn.disabled = false;
+        }
     }
 }
-
-
 /**
  * Save clause to library
  */
@@ -1747,24 +1792,353 @@ async function saveClauseToLibrary() {
             throw new Error(data.detail || 'Failed to save clause');
         }
         
-        if (data.already_saved) {
-            saveBtn.textContent = '✓ Already Saved';
-        } else {
-            saveBtn.textContent = '✓ Saved to Library';
-        }
-        
+        // ✅ PERMANENTLY MARK AS SAVED
+        saveBtn.textContent = '✓ Saved to Library';
         saveBtn.classList.add('saved');
+        saveBtn.disabled = true; // Keep disabled
         
         // Show success notification
-        showNotification('Clause saved to library successfully!', 'success');
+        const message = data.already_saved 
+            ? 'Clause was already in library' 
+            : 'Clause saved to library successfully!';
+        showNotification(message, 'success');
         
     } catch (error) {
         console.error('Error saving clause:', error);
         alert('Failed to save clause: ' + error.message);
         saveBtn.disabled = false;
         saveBtn.textContent = '💾 Save to Library';
+        saveBtn.classList.remove('saved');
     }
 }
+
+/**
+ * ============================================================
+ * CLAUSE LIBRARY PAGE
+ * ============================================================
+ */
+
+/**
+ * Show Clause Library view
+ */
+async function showClauseLibrary() {
+    console.log('📋 Loading Clause Library...');
+    
+    appState.currentView = 'clause-library';
+    
+    // Update active nav link
+    updateNavigation('clause-library');
+    
+    const content = `
+        <div class="view-container">
+            <div class="view-header">
+                <h1 class="view-title">📋 Clause Library</h1>
+                <p class="view-subtitle">Browse and manage your saved clauses</p>
+            </div>
+            
+            <div class="search-section">
+                <div class="search-bar">
+                    <input 
+                        type="text" 
+                        id="clauseSearchInput" 
+                        class="search-input" 
+                        placeholder="🔍 Search clauses by title..."
+                        onkeyup="filterClauses()"
+                    >
+                </div>
+            </div>
+            
+            <div id="clauseLibraryContent" class="clause-library-content">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Use querySelector for class-based selector
+    document.querySelector('.main-content').innerHTML = content;
+    
+    // Load clauses
+    await loadClauseLibrary();
+}
+
+/**
+ * Load all saved clauses from library
+ */
+async function loadClauseLibrary() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/clauses/library`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to load clause library');
+        }
+        
+        const data = await response.json();
+        console.log(`📚 Loaded ${data.count} clauses from library`);
+        
+        displayClauseLibrary(data.clauses);
+        
+    } catch (error) {
+        console.error('Error loading clause library:', error);
+        document.getElementById('clauseLibraryContent').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <p>Failed to load clause library</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Display clause library
+ */
+function displayClauseLibrary(clauses) {
+    const container = document.getElementById('clauseLibraryContent');
+    
+    if (!clauses || clauses.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <p>No clauses saved yet</p>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 8px;">
+                    Extract clauses from documents and save them to build your library
+                </p>
+            </div>
+        `;
+        return;
+    }
+    
+    const clauseCards = clauses.map(clause => `
+        <div class="clause-library-card" data-clause-id="${clause.id}" data-clause-title="${escapeHtml(clause.title)}">
+            <div class="clause-card-header">
+                <h3 class="clause-card-title">${escapeHtml(clause.title)}</h3>
+                ${clause.section_number ? `<span class="clause-section-badge">${escapeHtml(clause.section_number)}</span>` : ''}
+            </div>
+            
+            <div class="clause-card-preview">
+                ${escapeHtml(clause.content_preview)}
+            </div>
+            
+            <div class="clause-card-meta">
+                <div class="clause-meta-item">
+                    <span class="meta-label">From:</span>
+                    <span class="meta-value">${escapeHtml(clause.source_document || 'Unknown')}</span>
+                </div>
+                <div class="clause-meta-item">
+                    <span class="meta-label">Saved:</span>
+                    <span class="meta-value">${formatDate(clause.created_at)}</span>
+                </div>
+            </div>
+            
+            <button class="btn-view-files" onclick="viewClauseFiles(${clause.id}, event)">
+                📄 View Files with this Clause
+            </button>
+        </div>
+    `).join('');
+    
+    container.innerHTML = `
+        <div class="clause-library-grid">
+            ${clauseCards}
+        </div>
+    `;
+}
+
+/**
+ * View files containing a specific clause - FIXED VERSION
+ */
+async function viewClauseFiles(clauseId, event) {
+    // Prevent event bubbling to avoid opening document modal
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    console.log(`🔍 Loading files for clause ID: ${clauseId}`);
+    
+    try {
+        const url = `${API_BASE_URL}/clauses/library/${clauseId}/files`;
+        console.log(`📡 Fetching from: ${url}`);
+        
+        const response = await fetch(url);
+        
+        console.log(`📊 Response status: ${response.status}`);
+        console.log(`📊 Response headers:`, response.headers.get('content-type'));
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Check content type and handle accordingly
+        const contentType = response.headers.get('content-type');
+        let data;
+        
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            // If not JSON, try to parse as text first to see what we're getting
+            const text = await response.text();
+            console.log('⚠️ Received non-JSON response:', text.substring(0, 200));
+            
+            // Try to parse as JSON anyway (in case content-type is wrong)
+            try {
+                data = JSON.parse(text);
+            } catch (parseError) {
+                throw new Error(`Server returned HTML instead of JSON. This might be a route conflict.`);
+            }
+        }
+        
+        console.log(`✅ Found ${data.files ? data.files.length : 0} files`);
+        
+        showClauseFilesModal(data);
+        
+    } catch (error) {
+        console.error('Error loading clause files:', error);
+        
+        // More user-friendly error message
+        if (error.message.includes('HTML') || error.message.includes('JSON')) {
+            alert('❌ Server configuration issue. Please check the backend routes and ensure the API endpoint returns JSON.');
+        } else {
+            alert('Failed to load files for this clause: ' + error.message);
+        }
+    }
+}
+
+/**
+ * Show modal with files containing the clause - FIXED VERSION
+ */
+function showClauseFilesModal(data) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.id = 'clauseFilesModal';
+    
+    const filesHtml = data.files && data.files.length > 0 ? data.files.map(file => `
+        <div class="clause-file-item" onclick="openFileFromClause('${file.id}', '${escapeHtml(file.title)}')">
+            <div class="file-icon">📄</div>
+            <div class="file-details">
+                <div class="file-title">${escapeHtml(file.title)}</div>
+                <div class="file-meta-small">
+                    Modified: ${formatDate(file.modified_at)}
+                </div>
+            </div>
+            <button class="btn-open-file">Open →</button>
+        </div>
+    `).join('') : `
+        <div class="empty-state">
+            <p>No files found with this clause</p>
+        </div>
+    `;
+    
+    modal.innerHTML = `
+        <div class="modal-overlay" onclick="closeClauseFilesModal()"></div>
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <div>
+                    <h2>📋 ${escapeHtml(data.clause_title)}</h2>
+                    <p class="modal-subtitle">${data.files ? data.files.length : 0} file(s) contain this clause</p>
+                </div>
+                <button class="close-btn" onclick="closeClauseFilesModal()">×</button>
+            </div>
+            
+            <div class="modal-body" style="padding: 2rem; max-height: 60vh; overflow-y: auto;">
+                <div class="clause-content-preview" style="margin-bottom: 2rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
+                    <strong>Clause Content:</strong>
+                    <p style="margin-top: 0.5rem; color: var(--text-secondary);">${escapeHtml(data.clause_content || 'No content available').substring(0, 300)}...</p>
+                </div>
+                
+                <h3 style="margin-bottom: 1rem; color: var(--primary-color);">Files:</h3>
+                <div class="clause-files-list">
+                    ${filesHtml}
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button onclick="closeClauseFilesModal()" class="btn-primary">Close</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+/**
+ * Close clause files modal
+ */
+function closeClauseFilesModal() {
+    const modal = document.getElementById('clauseFilesModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * Open file from clause library
+ */
+async function openFileFromClause(fileId, fileName = null) {
+    console.log(`📂 Opening file: ${fileId}`);
+    closeClauseFilesModal();
+    
+    try {
+        // Switch to Files view first
+        appState.currentView = 'files';
+        await showFilesView();
+        
+        // Wait a moment for the view to render
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Open the document modal with proper parameters
+        await openDocumentModal(fileId, fileName || 'Document', 'application/pdf');
+        
+    } catch (error) {
+        console.error('Error opening file from clause:', error);
+        showNotification('❌ Failed to open document', 'error');
+    }
+}
+
+/**
+ * Filter clauses by search query
+ */
+function filterClauses() {
+    const searchInput = document.getElementById('clauseSearchInput');
+    if (!searchInput) return;
+    
+    const query = searchInput.value.toLowerCase();
+    const cards = document.querySelectorAll('.clause-library-card');
+    
+    cards.forEach(card => {
+        const title = card.dataset.clauseTitle.toLowerCase();
+        if (title.includes(query)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+/**
+ * Helper: Format date
+ */
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+    });
+}
+
+/**
+ * Helper: Escape HTML
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 
 
 /**
@@ -1888,6 +2262,12 @@ async function initApp() {
               <span class="nav-icon">🏷️</span>
               <span>AI Tags</span>
             </button>
+          </li>
+          <li class="nav-item">
+              <button class="nav-link" data-view="clause-library" onclick="navigateTo('clause-library')">
+                  <span class="nav-icon">📋</span>
+                  <span>Clauses</span>
+              </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="settings" onclick="navigateTo('settings')">
