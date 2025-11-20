@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 import os
 import sys
 import asyncio
@@ -37,8 +38,20 @@ app.add_middleware(
 )
 
 
-# ✅ ONLY API ROUTES - No frontend serving!
+# ✅ API ROUTES FIRST (CRITICAL!)
 app.include_router(router, prefix="/api")
+
+
+# ✅ FRONTEND SERVING (AFTER API ROUTES)
+frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+if os.path.exists(frontend_path):
+    # Mount static files
+    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+    
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        """Serve frontend index.html at root"""
+        return FileResponse(os.path.join(frontend_path, 'index.html'))
 
 
 # Health check with database status
