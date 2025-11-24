@@ -1,6 +1,6 @@
 // Knowledge Hub - Enhanced Frontend with All Features
 //const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || '';
- const API_BASE_URL = window.RUNTIME_ENV?.SERVICE_API_BASE_URL;
+const API_BASE_URL = window.RUNTIME_ENV?.SERVICE_API_BASE_URL;
 console.log('API_BASE_URL:', API_BASE_URL);
 // Application State
 // Application State
@@ -1480,7 +1480,7 @@ async function findSimilarFiles(clauseTitle) {
         
         // Display similar files
         container.innerHTML = data.files.map(file => `
-            <div class="similar-file-item" onclick="openDocumentModal('${file.file_id}', '${file.file_name}', 'application/pdf')">
+            <div class="similar-file-item" style="cursor: default;">
                 <div class="similar-file-icon">📄</div>
                 <div class="similar-file-info">
                     <div class="similar-file-name">${file.file_name}</div>
@@ -2005,7 +2005,7 @@ async function viewClauseFiles(clauseId, event) {
 }
 
 /**
- * Show modal with files containing the clause - FIXED VERSION
+ * Show modal with files containing the clause - INFO ONLY, NO BUTTONS
  */
 function showClauseFilesModal(data) {
     const modal = document.createElement('div');
@@ -2014,7 +2014,7 @@ function showClauseFilesModal(data) {
     modal.id = 'clauseFilesModal';
     
     const filesHtml = data.files && data.files.length > 0 ? data.files.map(file => `
-        <div class="clause-file-item" onclick="openFileFromClause('${file.id}', '${escapeHtml(file.title)}')">
+        <div class="clause-file-item-info">
             <div class="file-icon">📄</div>
             <div class="file-details">
                 <div class="file-title">${escapeHtml(file.title)}</div>
@@ -2022,7 +2022,9 @@ function showClauseFilesModal(data) {
                     Modified: ${formatDate(file.modified_at)}
                 </div>
             </div>
-            <button class="btn-open-file">Open →</button>
+            <span class="match-type-badge ${file.match_type || 'similar'}">
+              ${file.match_type || 'Similar'}
+            </span>
         </div>
     `).join('') : `
         <div class="empty-state">
@@ -2047,8 +2049,8 @@ function showClauseFilesModal(data) {
                     <p style="margin-top: 0.5rem; color: var(--text-secondary);">${escapeHtml(data.clause_content || 'No content available').substring(0, 300)}...</p>
                 </div>
                 
-                <h3 style="margin-bottom: 1rem; color: var(--primary-color);">Files:</h3>
-                <div class="clause-files-list">
+                <h3 style="margin-bottom: 1rem; color: var(--primary-color);">Files containing this clause:</h3>
+                <div class="clause-files-list-info">
                     ${filesHtml}
                 </div>
             </div>
@@ -2062,6 +2064,7 @@ function showClauseFilesModal(data) {
     document.body.appendChild(modal);
 }
 
+
 /**
  * Close clause files modal
  */
@@ -2071,31 +2074,6 @@ function closeClauseFilesModal() {
         modal.remove();
     }
 }
-
-/**
- * Open file from clause library
- */
-async function openFileFromClause(fileId, fileName = null) {
-    console.log(`📂 Opening file: ${fileId}`);
-    closeClauseFilesModal();
-    
-    try {
-        // Switch to Files view first
-        appState.currentView = 'files';
-        await showFilesView();
-        
-        // Wait a moment for the view to render
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Open the document modal with proper parameters
-        await openDocumentModal(fileId, fileName || 'Document', 'application/pdf');
-        
-    } catch (error) {
-        console.error('Error opening file from clause:', error);
-        showNotification('❌ Failed to open document', 'error');
-    }
-}
-
 /**
  * Filter clauses by search query
  */

@@ -1462,3 +1462,48 @@ body {
     background: var(--bg-tertiary);
     border-radius: 8px;
 }
+
+/* Clause File Item - Info Only */
+.clause-file-item-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: var(--spacing-sm);
+    transition: all 0.2s ease;
+}
+
+.clause-file-item-info:hover {
+    border-color: var(--primary-color);
+    background: var(--bg-tertiary);
+}
+
+.clause-files-list-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+/* Match Type Badges */
+.match-type-badge {
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.match-type-badge.exact {
+    background: #4caf50;
+    color: white;
+}
+
+.match-type-badge.similar {
+    background: #2196f3;
+    color: white;
+}
+
