@@ -850,15 +850,9 @@ async def get_files_with_clause(clause_id: int, db: Session = Depends(get_db)):
         ).first()
         
         if not library_clause:
-            print(f"❌ Clause {clause_id} not found in library")
-            return JSONResponse(
-                status_code=404,
-                content={"error": f"Clause {clause_id} not found in library"}
-            )
+            raise HTTPException(status_code=404, detail="Clause not found in library")
         
-        print(f"✅ Found clause: {library_clause.clause_title}")
-        
-        # Find all documents with this clause title
+        # Find all documents with this clause title (fuzzy search)
         matching_clauses = db.query(DocumentClause).filter(
             DocumentClause.clause_title.ilike(f"%{library_clause.clause_title}%")
         ).all()
@@ -867,52 +861,60 @@ async def get_files_with_clause(clause_id: int, db: Session = Depends(get_db)):
         doc_ids = list(set([clause.document_id for clause in matching_clauses]))
         
         if not doc_ids:
-            print(f"ℹ️ No files found for clause: {library_clause.clause_title}")
-            return JSONResponse(
-                content={
-                    "clause_title": library_clause.clause_title,
-                    "clause_content": library_clause.clause_content or "No content available",
-                    "files": []
-                }
-            )
+            return {
+                "clause_title": library_clause.clause_title,
+                "clause_content": library_clause.clause_content,
+                "files": []
+            }
         
         # Get document details
         documents = db.query(Document).filter(Document.id.in_(doc_ids)).all()
         
+        # Create a mapping of document_id to clause for match type detection
+        doc_to_clause = {}
+        for clause in matching_clauses:
+            doc_to_clause[clause.document_id] = clause
+        
         files = []
         for doc in documents:
-            try:
-                file_data = {
-                    "id": doc.id,
-                    "title": doc.title or "Unknown Title",
-                    "mime_type": doc.mime_type or "Unknown Type",
-                    "modified_at": doc.modified_at.isoformat() if doc.modified_at else None,
-                    "file_url": doc.file_url or "",
-                    "owner_name": doc.owner_name or "Unknown Owner"
-                }
-                files.append(file_data)
-            except Exception as file_error:
-                print(f"⚠️ Error processing document {doc.id}: {file_error}")
-                continue
+            # Determine match type: exact or similar
+            clause_in_doc = doc_to_clause.get(doc.id)
+            
+            if clause_in_doc:
+                # Case-insensitive exact match
+                if clause_in_doc.clause_title.strip().lower() == library_clause.clause_title.strip().lower():
+                    match_type = "exact"
+                else:
+                    match_type = "similar"
+            else:
+                match_type = "similar"
+            
+            files.append({
+                "id": doc.id,
+                "title": doc.title,
+                "mime_type": doc.mime_type,
+                "modified_at": doc.modified_at.isoformat() if doc.modified_at else None,
+                "file_url": doc.file_url,
+                "owner_name": doc.owner_name,
+                "match_type": match_type  # ← ADD THIS
+            })
         
-        print(f"✅ Found {len(files)} files with clause: {library_clause.clause_title}")
+        print(f"✅ Found {len(files)} files with this clause")
         
-        return JSONResponse(
-            content={
-                "clause_title": library_clause.clause_title,
-                "clause_content": library_clause.clause_content or "No content available",
-                "files": files
-            }
-        )
+        return {
+            "clause_title": library_clause.clause_title,
+            "clause_content": library_clause.clause_content,
+            "files": files
+        }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ Error in get_files_with_clause for clause {clause_id}: {e}")
+        print(f"❌ Error: {e}")
         import traceback
         print(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"error": f"Internal server error: {str(e)}"}
-        )
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # 2️⃣ OTHER SPECIFIC ROUTES
 @router.get("/clauses/check-saved/{document_id}/{clause_number}")
