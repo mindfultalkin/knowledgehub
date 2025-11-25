@@ -608,17 +608,6 @@ async def simple_text_search(query: str, db: Session = Depends(get_db)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Simple search failed: {str(e)}")
 
-
-
-
-
-
-
-
-
-
-
-
 # ==================== DEBUG ROUTES ====================
 
 
@@ -1213,59 +1202,61 @@ async def find_similar_clauses(
     db: Session = Depends(get_db)
 ):
     """
-    Find other files that contain the same or similar clause title
+    Find other files that contain the same or similar clause title,
+    including the full text (clause_content) for side-by-side comparison.
     """
     try:
         print(f"🔍 Searching for clauses similar to: {clause_title}")
         print(f"   Excluding current file: {current_file_id}")
-        
+
         # Search for similar clause titles (case-insensitive, fuzzy matching)
         similar_clauses = db.query(DocumentClause).filter(
             DocumentClause.document_id != current_file_id,
             DocumentClause.clause_title.ilike(f"%{clause_title}%")
         ).all()
-        
+
         print(f"   Found {len(similar_clauses)} similar clauses in database")
-        
+
         if not similar_clauses:
             return {
                 "found": False,
                 "count": 0,
                 "files": []
             }
-        
-        # Group by document and get file info
+
+        # Group by document and get file info, include clause_content
         files_dict = {}
         for clause in similar_clauses:
             doc_id = clause.document_id
-            
+            # Only use the first matching clause per document
             if doc_id not in files_dict:
                 # Get document info from database
                 document = db.query(Document).filter(Document.id == doc_id).first()
-                
                 files_dict[doc_id] = {
                     "file_id": doc_id,
                     "file_name": document.title if document else "Unknown Document",
                     "clause_title": clause.clause_title,
                     "section_number": clause.section_number,
+                    "clause_content": clause.clause_content,  # <<-- ADDED!
                     "match_type": "exact" if clause.clause_title.lower() == clause_title.lower() else "similar"
                 }
-        
+
         files_list = list(files_dict.values())
-        
+
         print(f"✅ Returning {len(files_list)} files with similar clauses")
-        
+
         return {
             "found": True,
             "count": len(files_list),
             "files": files_list
         }
-        
+
     except Exception as e:
         print(f"❌ Error finding similar clauses: {e}")
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 

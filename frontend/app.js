@@ -29,7 +29,10 @@ const appState = {
   searchResults: []
 };
 
-
+// NEW: Comparison state variables
+let selectedSimilarFileId = null;
+let selectedSimilarClauseData = null;
+window.selectedClauseData = null;
 
 // Apply theme on load
 document.documentElement.setAttribute('data-theme', appState.theme);
@@ -1250,7 +1253,6 @@ async function openDocumentModal(fileId, fileName, mimeType) {
 
 
 
-
 /**
  * Update autoLoadCachedClauses to show extract button if no clauses
  */
@@ -1453,6 +1455,15 @@ async function selectClause(clauseNumber) {
     
     // Find similar files with this clause title
     await findSimilarFiles(clause.title); 
+    
+    // NEW: Set current clause data for comparison
+    window.selectedClauseData = {
+        file_title: currentDocumentName,
+        clause_title: clause.title || clause.clause_title,
+        clause_content: clause.content || clause.clause_content
+    };
+    selectedSimilarFileId = null;
+    selectedSimilarClauseData = null;
 }
 
 /**
@@ -1478,17 +1489,35 @@ async function findSimilarFiles(clauseTitle) {
             return;
         }
         
-        // Display similar files
+        // NEW: Display similar files with radio selection and compare button
         container.innerHTML = data.files.map(file => `
-            <div class="similar-file-item" style="cursor: default;">
-                <div class="similar-file-icon">📄</div>
-                <div class="similar-file-info">
-                    <div class="similar-file-name">${file.file_name}</div>
-                    <div class="similar-file-clause">${file.section_number}. ${file.clause_title}</div>
-                    <span class="match-badge ${file.match_type}">${file.match_type}</span>
+            <div class="similar-file-item" style="display:flex;align-items:center;gap:10px;">
+                <input type="radio" name="compare-similar"
+                    value="${file.file_id || file.id}"
+                    data-title="${escapeHtml(file.clause_title)}"
+                    data-content="${escapeHtml(file.clause_content)}"
+                    data-source="${escapeHtml(file.file_name)}"
+                    onchange="onSelectSimilarClause('${file.file_id || file.id}')"
+                    ${selectedSimilarFileId === (file.file_id || file.id) ? 'checked' : ''}>
+                <div class="similar-file-info" style="flex:1;">
+                    <div class="file-title">${escapeHtml(file.file_name)}</div>
+                    <div class="file-meta-small">${escapeHtml(file.section_number)}. ${escapeHtml(file.clause_title)}</div>
+                    <span class="match-badge ${file.match_type}">${file.match_type ? file.match_type.toUpperCase() : ''}</span>
                 </div>
             </div>
-        `).join('');
+        `).join('') +
+        `<div style="margin-top:16px;">
+            <button id="compareBtn" class="btn-primary" style="width:100%;" disabled>
+                Compare With Selected
+            </button>
+        </div>`;
+        
+        if (document.getElementById('compareBtn')) {
+            document.getElementById('compareBtn').onclick = function() {
+                if (!selectedSimilarClauseData || !window.selectedClauseData) return;
+                showInlineComparison(window.selectedClauseData, selectedSimilarClauseData);
+            };
+        }
         
         console.log(`✅ Displayed ${data.count} similar files`);
         
@@ -1497,166 +1526,13 @@ async function findSimilarFiles(clauseTitle) {
         container.innerHTML = '<div class="empty-state">⚠️ Error loading similar files</div>';
     }
 }
-
-
-
-/**
- * Load document details (tags, file info)
- */
-/**
- * Load document details (tags, file info)
- */
-/**
- * Load document details (tags) when modal opens
- */
-async function loadDocumentDetails(fileId) {
-    try {
-        // Find file from appState.files array
-        const file = appState.files.find(f => f.id === fileId);
-        
-        if (!file) {
-            console.error('File not found in appState');
-            displayTags([]);
-            return;
-        }
-        
-        console.log('File object:', file);
-        
-        // Display tags from file object
-        const tags = file.aiTags || file.tags || [];
-        displayTags(tags);
-        
-    } catch (error) {
-        console.error('Error loading document details:', error);
-        displayTags([]);
-    }
-}
-
-/**
- * Display tags in the modal
- */
-function displayTags(tags) {
-    const container = document.getElementById('tagsContent');
-    
-    if (!tags || tags.length === 0) {
-        container.innerHTML = '<div class="empty-state">No tags available</div>';
-        return;
-    }
-    
-    container.innerHTML = tags.map(tag => 
-        `<span class="tag">${tag}</span>`
-    ).join('');
-}
-
-
-
-
-/**
- * Display tags in modal
- */
-function displayTags(tags) {
-    const container = document.getElementById('tagsContent');
-    
-    if (!tags || tags.length === 0) {
-        container.innerHTML = '<p class="empty-state">No tags</p>';
-        return;
-    }
-    
-    container.innerHTML = tags.map(tag => 
-        `<span class="tag">${tag}</span>`
-    ).join('');
-}
-
-/**
- * Display file information
- */
-/**
- * Display file information
- */
-/**
- * Display file information
- */
-function displayFileInfo(file) {
-    const container = document.getElementById('fileInfoContent');
-    
-    // Format file size
-    const formatSize = (bytes) => {
-        if (!bytes || bytes === 'Unknown') return 'Unknown';
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        if (bytes === 0) return '0 B';
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
-    };
-    
-    // Format date
-    const formatDate = (dateStr) => {
-        if (!dateStr || dateStr === 'Unknown') return 'Unknown';
-        const date = new Date(dateStr);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-    };
-    
-    const info = [
-        { label: 'Type', value: file.mime_type || file.mimeType || 'Unknown' },
-        { label: 'Size', value: formatSize(file.size) },
-        { label: 'Owner', value: file.ownerName || 'Unknown' },
-        { label: 'Modified', value: formatDate(file.modified_time || file.modifiedTime) },
-        { label: 'Created', value: formatDate(file.created_time || file.createdTime) }
-    ];
-    
-    container.innerHTML = info.map(item => `
-        <div class="info-row">
-            <span class="info-label">${item.label}:</span>
-            <span class="info-value">${item.value}</span>
-        </div>
-    `).join('');
-}
-
-
-
-/**
- * Extract clauses from document
- */
-async function extractClauses() {
-    if (!currentDocumentId) {
-        alert('No document selected');
-        return;
-    }
-    
-    const clausesList = document.getElementById('clausesList');
-    clausesList.innerHTML = '<div class="loading-state">Extracting clauses... Please wait.</div>';
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/documents/${currentDocumentId}/extract-clauses`, {
-            method: 'POST'
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to extract clauses');
-        }
-        
-        const data = await response.json();
-        currentClauses = data.clauses || [];
-        
-        if (currentClauses.length === 0) {
-            clausesList.innerHTML = '<div class="empty-state">No clauses found in this document</div>';
-            return;
-        }
-        
-        // Display clauses list
-        displayClausesList(currentClauses);
-        
-    } catch (error) {
-        console.error('Error extracting clauses:', error);
-        clausesList.innerHTML = '<div class="empty-state">Error extracting clauses. Please try again.</div>';
-        alert('Failed to extract clauses: ' + error.message);
-    }
-}
-
-/**
- * Display list of clauses (titles only, no content preview)
- */
 function displayClausesList(clauses) {
     const container = document.getElementById('clausesList');
+    
+    if (!clauses || clauses.length === 0) {
+        container.innerHTML = '<div class="empty-state">No clauses found in this document</div>';
+        return;
+    }
     
     container.innerHTML = clauses.map(clause => `
         <div class="clause-item" onclick="selectClause(${clause.clause_number})" data-clause="${clause.clause_number}">
@@ -1666,41 +1542,134 @@ function displayClausesList(clauses) {
     `).join('');
 }
 
-/**
- * Select and display a clause
- */
-async function selectClause(clauseNumber) {
-    selectedClauseNumber = clauseNumber;
-    
-    console.log('🔍 Clause clicked:', clauseNumber);
-    
-    // Highlight selected clause
-    document.querySelectorAll('.clause-item').forEach(item => {
-        item.classList.remove('active');
+// NEW: Handler for radio selection
+function onSelectSimilarClause(fileId) {
+    selectedSimilarFileId = fileId;
+    const radio = document.querySelector(`input[name='compare-similar'][value="${fileId}"]`);
+    if (radio) {
+        selectedSimilarClauseData = {
+            file_id: fileId,
+            clause_title: radio.dataset.title,
+            clause_content: radio.dataset.content,
+            file_title: radio.dataset.source
+        };
+        document.getElementById('compareBtn').disabled = false;
+    }
+    document.querySelectorAll("input[name='compare-similar']").forEach(r => {
+        if (r.value !== fileId) r.checked = false;
     });
-    const selectedItem = document.querySelector(`.clause-item[data-clause="${clauseNumber}"]`);
-    if (selectedItem) {
-        selectedItem.classList.add('active');
-    }
-    
-    // Find clause data
-    const clause = currentClauses.find(c => c.clause_number === clauseNumber);
-    
-    if (!clause) {
-        console.error('❌ Clause not found:', clauseNumber);
-        return;
-    }
-    
-    console.log('✅ Selected clause:', clause);
-    
-    // Display clause content in middle panel
-    displaySelectedClause(clause);
-    
-    // Find similar files with this clause title
-    const clauseTitle = clause.title || clause.clause_title;
-    console.log('🔍 Searching for similar files with title:', clauseTitle);
-    await findSimilarFiles(clauseTitle);
 }
+
+// FIXED: Comparison section outside the three-column layout
+function showInlineComparison(mainClause, similarClause) {
+    // Remove any previous comparison section
+    let existing = document.getElementById('inlineCompareSection');
+    if (existing) existing.remove();
+    
+    // Build the comparison HTML with flexbox layout
+    const html = `
+      <div id="inlineCompareSection" style="margin-top: 32px; border-top: 2px solid #ececf0; border-radius: 10px; background: #f9fcff; padding: 2.3rem 1.2rem 2.5rem 1.2rem; box-shadow:0 2px 22px 0 rgba(22,33,77,.09);">
+        <h3 style="margin-bottom:2.2rem; font-size:1.22rem; letter-spacing:-0.5px; font-weight:800; color:#26327e;">
+          <span style="vertical-align:-2px; margin-right:8px;">
+            <svg width="22" height="22" fill="#5c64d6"><rect width="22" height="22" rx="6" fill="#e9ebfa"/><path d="M6 6h10v2H6V6zm0 4h10v6H6v-6zm2 2v2h6v-2H8z" fill="#555ab8"/></svg>
+          </span>
+          Clause Comparison Result
+        </h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;">
+          <div style="background:#fff;border:2px solid #4b72e0;border-radius:9px;padding:1.3rem 1.5rem;">
+            <div style="font-size:1.01rem; font-weight:700; color:#356bc9;margin-bottom:5px;">
+              <span style="vertical-align:-4px;">📄</span> ${escapeHtml(mainClause.file_title)}
+            </div>
+            <div class="clause-title" style="font-size:1.09rem;color:#181845;font-weight:700;margin-bottom:10px;">${escapeHtml(mainClause.clause_title)}</div>
+            <hr style="border: none; border-top: 1px solid #e6e7ea; margin:12px 0;">
+            <div class="clause-content-diff" style="background:#eaf5fc;padding:17px 17px 14px;border-radius:7px;white-space:pre-line;min-height:65px;">
+              ${mainClause.clause_content ? highlightDiff(mainClause.clause_content, similarClause.clause_content, 'left') : '<em>No content found.</em>'}
+            </div>
+          </div>
+          <div style="background:#fff;border:2px solid #28b7a5;border-radius:9px;padding:1.3rem 1.5rem;">
+            <div style="font-size:1.01rem; font-weight:700; color:#179076;margin-bottom:5px;">
+              <span style="vertical-align:-4px;">📄</span> ${escapeHtml(similarClause.file_title)}
+            </div>
+            <div class="clause-title" style="font-size:1.09rem;color:#181845;font-weight:700;margin-bottom:10px;">${escapeHtml(similarClause.clause_title)}</div>
+            <hr style="border: none; border-top: 1px solid #e6e7ea; margin:12px 0;">
+            <div class="clause-content-diff" style="background:#eafaf2;padding:17px 17px 14px;border-radius:7px;white-space:pre-line;min-height:65px;">
+              ${similarClause.clause_content ? highlightDiff(similarClause.clause_content, mainClause.clause_content, 'right') : '<em>No content found.</em>'}
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:32px;">
+          <button onclick="clearInlineComparison()" class="btn-primary" style="background:#ff4040;border:none;">&#10006; Remove Comparison</button>
+        </div>
+      </div>
+    `;
+
+    
+    // Append to the modal content BUT AFTER the three-column layout
+    const modalContent = document.querySelector('.modal-content');
+    const threeColumnLayout = document.querySelector('.three-column-layout');
+    
+    if (modalContent && threeColumnLayout) {
+        // Insert the comparison section AFTER the three-column layout
+        threeColumnLayout.insertAdjacentHTML('afterend', html);
+        
+        // Scroll to the comparison section
+        setTimeout(() => {
+            const comparisonSection = document.getElementById('inlineCompareSection');
+            if (comparisonSection) {
+                comparisonSection.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start'
+                });
+            }
+        }, 100);
+    }
+}
+// NEW: Clear inline comparison
+// Update clearInlineComparison function
+function clearInlineComparison() {
+    let section = document.getElementById('inlineCompareSection');
+    if (section) {
+        section.remove();
+    }
+    
+    // Also clear any selected radio buttons
+    document.querySelectorAll("input[name='compare-similar']").forEach(radio => {
+        radio.checked = false;
+    });
+    
+    // Disable compare button
+    const compareBtn = document.getElementById('compareBtn');
+    if (compareBtn) {
+        compareBtn.disabled = true;
+    }
+    
+    // Clear selection state
+    selectedSimilarFileId = null;
+    selectedSimilarClauseData = null;
+}
+// NEW: Highlight differences between clauses
+function highlightDiff(a, b, side) {
+    if (!a || !b) return escapeHtml(a || '');
+    const aWords = a.split(' ');
+    const bWords = b.split(' ');
+    let html = '';
+    for (let i = 0; i < aWords.length; i++) {
+        if (aWords[i] !== bWords[i]) {
+            html += `<span style="background:${side === 'left' ? '#ffdbe3' : '#d2ffd6'};border-radius:4px;padding:1px 2px;">${escapeHtml(aWords[i])}</span> `;
+        } else {
+            html += escapeHtml(aWords[i]) + ' ';
+        }
+    }
+    return html.trim();
+}
+
+// NEW: Escape HTML utility function
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>'"]/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[c]));
+}
+
 /**
  * Display selected clause content
  */
@@ -2022,9 +1991,7 @@ function showClauseFilesModal(data) {
                     Modified: ${formatDate(file.modified_at)}
                 </div>
             </div>
-            <span class="match-type-badge ${file.match_type || 'similar'}">
-              ${file.match_type || 'Similar'}
-            </span>
+            <span class="match-type-badge ${file.match_type || 'similar'}">${file.match_type || 'Similar'}</span>
         </div>
     `).join('') : `
         <div class="empty-state">
@@ -2125,17 +2092,20 @@ function escapeHtml(text) {
 function closeModal() {
     const modal = document.getElementById('documentModal');
     modal.style.display = 'none';
-    
-    // Reset state
     currentDocumentId = null;
     currentClauses = [];
     selectedClauseNumber = null;
-    
+
     // Clear content
     document.getElementById('clausesList').innerHTML = 
         '<div class="loading-state">Click "Extract Clauses" to analyze document</div>';
     document.getElementById('selectedClauseContainer').style.display = 'none';
+
+    // 👉 CLEAR the comparison UI if present
+    const compareSection = document.getElementById('inlineCompareSection');
+    if (compareSection) compareSection.remove();
 }
+
 
 /**
  * Show notification (helper function)
