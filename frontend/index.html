@@ -17,50 +17,84 @@
     <script src="app.js"></script>
     
     <!-- Document Details Modal -->
-    <!-- Place this inside <body> -->
     <div id="documentModal" class="modal">
         <div class="modal-overlay" onclick="closeModal()"></div>
         <div class="modal-content">
-            <!-- Header -->
+            <!-- Modal Header w/ Toggle Buttons -->
             <div class="modal-header">
                 <div>
                     <h2 id="modalTitle">Document Details</h2>
                     <p id="modalSubtitle" class="modal-subtitle"></p>
                 </div>
+                <div class="toggle-buttons">
+                    <button id="showClausesBtn" class="toggle-btn active" onclick="toggleView('clauses')">
+                        📋 Show Clauses
+                    </button>
+                    <button id="showRiskBtn" class="toggle-btn" onclick="toggleView('risk')">
+                        📊 Show Risk Score
+                    </button>
+                </div>
                 <button class="close-btn" onclick="closeModal()">×</button>
             </div>
-            <div class="modal-body three-column-layout">
-                <!-- Clauses List -->
-                <div class="modal-column clauses-column">
-                    <h3>📋 Clauses</h3>
-                    <div id="clausesList" class="clauses-list">
-                        <div class="loading-state">Loading clauses...</div>
+            <!-- CLAUSES VIEW (DEFAULT) -->
+            <div id="clausesView" class="modal-view active" style="display: block;">
+                <div class="modal-body three-column-layout">
+                    <!-- Clauses Column -->
+                    <div class="modal-column clauses-column">
+                        <h3>📋 Clauses</h3>
+                        <div id="clausesList" class="clauses-list">
+                            <div class="loading-state">Loading clauses...</div>
+                        </div>
                     </div>
-                </div>
-                <!-- Tags + Clause Content -->
-                <div class="modal-column content-column">
-                    <h3>🏷️ Tags</h3>
-                    <div id="tagsContainer" class="tags-content"></div>
-                    <div id="selectedClauseContainer" class="selected-clause-container" style="display: none;">
-                        <h3>📄 Selected Clause</h3>
-                        <div class="clause-display">
-                            <h4 id="selectedClauseTitle"></h4>
-                            <div id="selectedClauseContent" class="clause-content"></div>
-                            <button id="saveToLibraryBtn" class="btn-save-library" onclick="saveClauseToLibrary()">
-                                💾 Save to Library
-                            </button>
+                    <!-- Tags + Clause Content -->
+                    <div class="modal-column content-column">
+                        <h3>🏷️ Tags</h3>
+                        <div id="tagsContainer" class="tags-content"></div>
+                        <div id="selectedClauseContainer" class="selected-clause-container" style="display: none;">
+                            <h3>📄 Selected Clause</h3>
+                            <div class="clause-display">
+                                <h4 id="selectedClauseTitle"></h4>
+                                <div id="selectedClauseContent" class="clause-content"></div>
+                                <button id="saveToLibraryBtn" class="btn-save-library" onclick="saveClauseToLibrary()">
+                                    💾 Save to Library
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Similar Files -->
+                    <div class="modal-column info-column">
+                        <h3>🔗 Similar Files</h3>
+                        <div id="similarFilesContent" class="similar-files-content">
+                            <div class="empty-state">Select a clause to find similar files</div>
                         </div>
                     </div>
                 </div>
-                <!-- Similar Files Column -->
-                <div class="modal-column info-column">
-                    <h3>🔗 Similar Files</h3>
-                    <div id="similarFilesContent" class="similar-files-content">
-                        <div class="empty-state">Select a clause to find similar files</div>
+            </div>
+            <!-- RISK SCORE TOGGLE VIEW (hidden initially) -->
+            <div id="riskView" class="modal-view" style="display: none;">
+                <div class="risk-score-section">
+                    <div class="risk-score-card">
+                        <div class="score-number" id="riskScoreNumber">--</div>
+                        <div class="score-label">RISK SCORE / 100</div>
+                        <div class="score-description" id="riskScoreLevel">--</div>
+                    </div>
+                    <div class="risk-breakdown">
+                        <div class="breakdown-item good">
+                            <strong>✓ Good Clauses:</strong>
+                            <ul id="goodClausesList"></ul>
+                        </div>
+                        <div class="breakdown-item caution">
+                            <strong>⚠️ Caution Items:</strong>
+                            <ul id="cautionClausesList"></ul>
+                        </div>
+                        <div class="breakdown-item missing">
+                            <strong>❌ Missing Clauses:</strong>
+                            <ul id="missingClausesList"></ul>
+                        </div>
                     </div>
                 </div>
             </div>
-            <!-- Footer w/ buttons left and right, both small -->
+            <!-- Modal Footer -->
             <div id="modalFooter" class="modal-footer" style="display: flex; justify-content: flex-end; gap: 12px; padding: 18px 24px; border-top: 1px solid #EEE;">
                 <button id="driveBtn"
                         class="btn-secondary btn-drive"

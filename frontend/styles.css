@@ -1554,3 +1554,79 @@ body {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+
+
+
+/* --- Contract Risk Scoring Toggle & Card Styles --- */
+
+.toggle-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+    justify-content: center;
+}
+
+.toggle-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #e0e0e0;
+    color: #333;
+}
+.toggle-btn:hover { background: #d0d0d0; transform: translateY(-2px); }
+.toggle-btn.active { background: #1976d2; color: white; box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3); }
+.toggle-btn.active:hover { background: #1565c0; }
+.modal-view { display: none; animation: fadeIn 0.3s ease; }
+.modal-view.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to {opacity: 1; transform: translateY(0);} }
+.risk-score-section {
+    padding: 20px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e3f2fd 100%);
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 20px;
+}
+.risk-score-card {
+    background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.risk-score-card.medium-risk { background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);}
+.risk-score-card.high-risk {background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);}
+.score-number { font-size: 2.5rem; font-weight: 700; margin-bottom: 10px; }
+.score-label { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; }
+.score-description { font-size: 0.85rem; opacity: 0.8; margin-top: 10px; }
+.risk-breakdown {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+.breakdown-item { padding: 15px; border-radius: 8px; background: white; border-left: 4px solid #4caf50; box-shadow: 0 2px 8px rgba(0,0,0,0.08);}
+.breakdown-item.good {border-left-color: #4caf50; background: #f1f8e9;}
+.breakdown-item.caution { border-left-color: #ff9800; background: #fff3e0;}
+.breakdown-item.missing { border-left-color: #f44336;background: #ffebee;}
+.breakdown-item strong { display: block; margin-bottom: 10px; font-size: 0.9rem; }
+.breakdown-item ul { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+.breakdown-item li { padding: 5px 0; color: var(--text-secondary); border-bottom: 1px solid rgba(0,0,0,0.05); }
+.breakdown-item li:last-child { border-bottom: none; }
+@media (max-width: 768px) {
+    .risk-breakdown { grid-template-columns: 1fr; }
+    .toggle-buttons { flex-direction: column; width: 100%; }
+}
+[data-theme="dark"] .toggle-btn { background: #444; color: #e0e0e0; }
+[data-theme="dark"] .toggle-btn:hover { background: #555; }
+[data-theme="dark"] .toggle-btn.active { background: #2196f3; }
+[data-theme="dark"] .risk-score-section {background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);}
+[data-theme="dark"] .breakdown-item {background: #2a2a2a; color: var(--text-primary);}
+[data-theme="dark"] .breakdown-item.good {background: #1b3d1b;}
+[data-theme="dark"] .breakdown-item.caution {background: #3d2e1b;}
+[data-theme="dark"] .breakdown-item.missing {background: #3d1b1b;}

@@ -3,6 +3,9 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from typing import Optional, List
 from sqlalchemy.orm import Session
 import os
+import json
+from models.metadata import DocumentTag, Tag
+
 
 # Import config FIRST
 import config
@@ -28,6 +31,9 @@ from models import Document, DocumentClause
 from database import SessionLocal
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
+from services.risk_scoring import score_contract
+from pydantic import BaseModel
+
 
 
 # ==================== PYDANTIC MODELS ====================
@@ -61,6 +67,49 @@ class ClauseLibraryResponse(BaseModel):
 class ClauseLibraryListResponse(BaseModel):
     count: int
     clauses: List[ClauseLibraryResponse]
+
+class TagUpdateRequest(BaseModel):
+    tag: str
+
+
+def _load_tags_from_doc(doc, db: Session):
+    """
+    Load tag NAMES for a document from DocumentTag/Tag tables.
+    """
+    doc_tags = db.query(DocumentTag, Tag).join(
+        Tag, DocumentTag.tag_id == Tag.id
+    ).filter(
+        DocumentTag.document_id == doc.id
+    ).all()
+
+    return [tag.name for doc_tag, tag in doc_tags]
+
+
+def _save_tags_to_doc(doc, tag_names, db: Session):
+    """
+    Replace current tags with provided tag_names list.
+    """
+    # 1) delete existing links
+    db.query(DocumentTag).filter(DocumentTag.document_id == doc.id).delete()
+
+    # 2) ensure Tag rows exist and re-create links
+    for name in tag_names:
+        clean = name.strip()
+        if not clean:
+            continue
+
+        tag_obj = db.query(Tag).filter(Tag.name == clean).first()
+        if not tag_obj:
+            tag_obj = Tag(name=clean, category="custom")
+            db.add(tag_obj)
+            db.flush()  # get tag_obj.id
+
+        link = DocumentTag(document_id=doc.id, tag_id=tag_obj.id)
+        db.add(link)
+
+    db.commit()
+
+
 
 
 # Only import dotenv in non-production
@@ -315,6 +364,92 @@ async def get_all_documents(
         print(f"❌ Error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/documents/{document_id}/tags")
+async def get_document_tags(document_id: str, db: Session = Depends(get_db)):
+    """
+    Return saved tags for a document.
+    First time: seed from SimpleTagger, then always read from DB.
+    """
+    try:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # 1) read saved tags from metadata tables
+        tags = _load_tags_from_doc(doc, db)
+
+        # 2) if none yet, seed from SimpleTagger once
+        if not tags and tagger:
+            auto_tags = tagger.generate_tags(doc.title or "", doc.mime_type, None)
+            tags = auto_tags
+            _save_tags_to_doc(doc, tags, db)
+
+        return {"document_id": document_id, "tags": tags}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/documents/{document_id}/tags/add")
+async def add_document_tag(
+    document_id: str,
+    payload: TagUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Add a tag to a document and persist in metadata tables.
+    """
+    try:
+        tag = (payload.tag or "").strip()
+        if not tag:
+            raise HTTPException(status_code=400, detail="Tag cannot be empty")
+
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        tags = _load_tags_from_doc(doc, db)
+        if tag not in tags:
+            tags.append(tag)
+            _save_tags_to_doc(doc, tags, db)
+
+        return {"success": True, "document_id": document_id, "tags": tags}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/documents/{document_id}/tags/remove")
+async def remove_document_tag(
+    document_id: str,
+    payload: TagUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Remove a tag from a document and persist in metadata tables.
+    """
+    try:
+        tag = (payload.tag or "").strip()
+        if not tag:
+            raise HTTPException(status_code=400, detail="Tag cannot be empty")
+
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        tags = _load_tags_from_doc(doc, db)
+        if tag in tags:
+            tags.remove(tag)
+            _save_tags_to_doc(doc, tags, db)
+
+        return {"success": True, "document_id": document_id, "tags": tags}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
@@ -543,8 +678,6 @@ async def get_all_tags():
         "categories": list(tagger.CATEGORIES.keys()),
         "contentTags": list(tagger.CONTENT_KEYWORDS.keys())
     }
-
-
 
 
 
@@ -818,6 +951,35 @@ async def get_file_preview(file_id: str, db: Session = Depends(get_db)):
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+#Contract Risk Scoring
+
+@router.get("/contracts/{file_id}/risk-score")
+async def risk_score(file_id: str, db: Session = Depends(get_db)):
+    """
+    Returns contract-level risk summary, per-clause risk, and missing clause checklist.
+    """
+    try:
+        # Fetch all clauses for this document
+        clauses = db.query(DocumentClause).filter(DocumentClause.document_id == file_id).all()
+        clause_list = [
+            {
+                "clause_number": c.clause_number,
+                "section_number": c.section_number,
+                "title": c.clause_title,
+                "content": c.clause_content,
+            }
+            for c in clauses
+        ]
+        return score_contract(clause_list)
+    except Exception as e:
+        print(f"❌ Risk scoring error: {e}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ============================================================

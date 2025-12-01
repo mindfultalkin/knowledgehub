@@ -1203,52 +1203,123 @@ let selectedClauseNumber = null;
 /**
  * Open document modal and load details
  */
+/**
+ * Open document modal and load details
+ */
 async function openDocumentModal(fileId, fileName, mimeType) {
+    // Store current document info
     currentDocumentId = fileId;
     currentDocumentName = fileName;
 
+    // Always reset to Clauses view when opening
+    toggleView('clauses');
+
     // Set modal title
-    document.getElementById('modalTitle').textContent = fileName;
+    const titleEl = document.getElementById('modalTitle');
+    if (titleEl) {
+        titleEl.textContent = fileName;
+    }
 
     // Show modal dialog
     const modal = document.getElementById('documentModal');
-    modal.style.display = 'flex';
+    if (modal) {
+        modal.style.display = 'flex';
+    }
 
-    // Clear similar files
+    // Clear similar files panel
     const similarFilesContent = document.getElementById('similarFilesContent');
     if (similarFilesContent) {
         similarFilesContent.innerHTML = '<div class="empty-state">Select a clause to find similar files</div>';
     }
 
-    // Load clauses
+    // Load clauses for this document
     await autoLoadCachedClauses(fileId);
 
-    // Tags
+    // Tags (editable - load from backend)
     const tagsContainer = document.getElementById('tagsContainer');
     if (tagsContainer) {
-        let tags = [];
-        const doc = (window.appState && Array.isArray(appState.files))
-            ? appState.files.find(f => f.id === fileId)
-            : null;
-        if (doc && doc.aiTags && doc.aiTags.length > 0) {
-            tags = doc.aiTags;
-        } else {
-            tags = fileName
-                .replace(/\.[\w\d]+$/, '')
-                .split(/[\s\-_\.]+/)
-                .filter(w => w.length > 2);
-        }
-        tagsContainer.innerHTML = tags.length
-            ? tags.map(tag => `<span class="tag">${tag}</span>`).join(' ')
-            : '<em>No tags</em>';
+        tagsContainer.innerHTML = '<div class="loading-state">Loading tags...</div>';
+        const tags = await fetchDocumentTags(fileId);
+        updateTagsDisplay(fileId, tags);
     }
 
-    // Set Open in Drive button handler
+    // Load risk score for this document
+    await loadContractRiskScore(fileId);
+
+    // Set "Open in Google Drive" button handler
     const driveBtn = document.getElementById('driveBtn');
     if (driveBtn) {
-        driveBtn.onclick = () => window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+        driveBtn.onclick = () =>
+            window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
     }
 }
+
+
+
+// ============================================================
+// RISK SCORE FETCHING AND RENDERING
+// ============================================================
+
+async function loadContractRiskScore(fileId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/contracts/${fileId}/risk-score`);
+        if (!response.ok) {
+            showNotification('⚠️ Could not load risk score', 'warning');
+            return;
+        }
+        const riskData = await response.json();
+        displayRiskScoreCard(riskData);
+        displayRiskBreakdown(riskData);
+    } catch (error) {
+        showNotification('Error loading risk score', 'error');
+        console.error(error);
+    }
+}
+
+function displayRiskScoreCard(riskData) {
+    const scoreEl = document.getElementById('riskScoreNumber');
+    const levelEl = document.getElementById('riskScoreLevel');
+    const cardEl = document.querySelector('.risk-score-card');
+    if (!scoreEl || !levelEl || !cardEl) return;
+
+    const score = riskData.risk_score || 0;
+    const level = riskData.risk_level || 'UNKNOWN';
+    scoreEl.textContent = score;
+
+    let emoji = '🔴';
+    if (level === 'LOW') emoji = '🟢';
+    else if (level === 'MEDIUM') emoji = '🟡';
+
+    levelEl.textContent = `${emoji} ${level}`;
+    cardEl.classList.remove('medium-risk', 'high-risk');
+    if (level === 'MEDIUM') cardEl.classList.add('medium-risk');
+    else if (level === 'HIGH') cardEl.classList.add('high-risk');
+}
+
+function displayRiskBreakdown(riskData) {
+    const goodList = document.getElementById('goodClausesList');
+    const cautionList = document.getElementById('cautionClausesList');
+    const missingList = document.getElementById('missingClausesList');
+    if (goodList) {
+        goodList.innerHTML = Array.isArray(riskData.good_clauses) && riskData.good_clauses.length
+            ? riskData.good_clauses.map(clause => `<li>✓ ${clause}</li>`).join('')
+            : '<li style="color: #999;">No favorable clauses detected</li>';
+    }
+    if (cautionList) {
+        cautionList.innerHTML = Array.isArray(riskData.caution_clauses) && riskData.caution_clauses.length
+            ? riskData.caution_clauses.map(clause => `<li>⚠️ ${clause}</li>`).join('')
+            : '<li style="color: #999;">No caution items detected</li>';
+    }
+    if (missingList) {
+        missingList.innerHTML = Array.isArray(riskData.missing_clauses) && riskData.missing_clauses.length
+            ? riskData.missing_clauses.map(clause => `<li>❌ ${clause}</li>`).join('')
+            : '<li style="color: #999;">No missing clauses detected</li>';
+    }
+}
+
+// ============================================================
+// END OF RISK SCORE FUNCTIONS
+// ============================================================
 
 
 
@@ -2060,6 +2131,113 @@ function filterClauses() {
         }
     });
 }
+async function fetchDocumentTags(documentId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/documents/${documentId}/tags`);
+    if (!res.ok) throw new Error('Failed to load tags');
+    const data = await res.json();
+    return data.tags || [];
+  } catch (e) {
+    console.error('Tag load error', e);
+    showNotification('⚠️ Could not load tags', 'error');
+    return [];
+  }
+}
+
+async function addTag(documentId) {
+  const newTag = prompt('Enter new tag:');
+  if (!newTag || !newTag.trim()) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/documents/${documentId}/tags/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag: newTag.trim() }),
+    });
+    if (!res.ok) throw new Error('Failed to add tag');
+    const data = await res.json();
+    updateTagsDisplay(documentId, data.tags || []);
+    showNotification(`✅ Tag "${newTag}" added`, 'success');
+  } catch (e) {
+    console.error('Add tag error', e);
+    showNotification('❌ Failed to add tag', 'error');
+  }
+}
+
+async function removeTag(documentId, tag) {
+  if (!confirm(`Remove tag "${tag}"?`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/documents/${documentId}/tags/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag }),
+    });
+    if (!res.ok) throw new Error('Failed to remove tag');
+    const data = await res.json();
+    updateTagsDisplay(documentId, data.tags || []);
+    showNotification(`✅ Tag "${tag}" removed`, 'success');
+  } catch (e) {
+    console.error('Remove tag error', e);
+    showNotification('❌ Failed to remove tag', 'error');
+  }
+}
+
+function updateTagsDisplay(documentId, tags) {
+  const tagsContainer = document.getElementById('tagsContainer');
+  if (!tagsContainer) return;
+
+  const safeTags = Array.isArray(tags) ? tags : [];
+
+  if (!safeTags.length) {
+    tagsContainer.innerHTML = `
+      <div class="tags-content">
+        <em style="color:var(--text-secondary);font-size:0.85rem;">No tags yet</em>
+        <button
+          type="button"
+          onclick="addTag('${documentId}')"
+          class="btn-secondary"
+          style="margin-top:12px;width:100%;text-align:center;"
+        >
+          ➕ Add Tag
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  tagsContainer.innerHTML = `
+    <div class="tags-content">
+      ${safeTags.map(tag => `
+        <span class="tag">
+          ${tag}
+          <button
+            type="button"
+            onclick="removeTag('${documentId}', '${tag.replace(/'/g, "\\'")}')"
+            style="
+              background:none;
+              border:none;
+              color:#fff;
+              cursor:pointer;
+              margin-left:6px;
+              font-weight:bold;
+              font-size:0.95rem;
+            "
+          >×</button>
+        </span>
+      `).join('')}
+      <button
+        type="button"
+        onclick="addTag('${documentId}')"
+        class="btn-secondary"
+        style="margin-top:12px;width:100%;text-align:center;"
+      >
+        ➕ Add Tag
+      </button>
+    </div>
+  `;
+}
+
 
 /**
  * Helper: Format date
@@ -2105,7 +2283,6 @@ function closeModal() {
     const compareSection = document.getElementById('inlineCompareSection');
     if (compareSection) compareSection.remove();
 }
-
 
 /**
  * Show notification (helper function)
@@ -2154,6 +2331,32 @@ function formatDate(dateString) {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+// ============================================================
+// RISK SCORE TOGGLE INTEGRATION
+// ============================================================
+
+function toggleView(viewType) {
+    const clausesView = document.getElementById('clausesView');
+    const riskView = document.getElementById('riskView');
+    const showClausesBtn = document.getElementById('showClausesBtn');
+    const showRiskBtn = document.getElementById('showRiskBtn');
+    if (viewType === 'clauses') {
+        clausesView.style.display = 'block';
+        clausesView.classList.add('active');
+        riskView.style.display = 'none';
+        riskView.classList.remove('active');
+        showClausesBtn.classList.add('active');
+        showRiskBtn.classList.remove('active');
+    } else {
+        riskView.style.display = 'block';
+        riskView.classList.add('active');
+        clausesView.style.display = 'none';
+        clausesView.classList.remove('active');
+        showRiskBtn.classList.add('active');
+        showClausesBtn.classList.remove('active');
+    }
 }
 
 
