@@ -68,7 +68,124 @@ class SimpleTagger:
         'certificate': ['certificate', 'certification', 'diploma'],
         'license': ['license', 'permit', 'authorization']
     }
-    
+        # Master tagging rules mapped from filename patterns (from your Excel)
+    TAG_RULES = [
+        # Document Types
+        {
+            "match": ["employment_agreement", "employment-agreement", "employment agreement"],
+            "tags": ["Employment Agreement", "Document Type: Employment Agreement"],
+        },
+        {
+            "match": ["offer_letter", "offer-letter", "offer letter"],
+            "tags": ["Offer Letter", "Document Type: Offer Letter"],
+        },
+        {
+            "match": ["consultancy_agreement", "consulting_agreement", "consulting-services-agreement"],
+            "tags": ["Consultancy Agreement", "Document Type: Consultancy Agreement"],
+        },
+        {
+            "match": ["nda", "non_disclosure", "non-disclosure", "non disclosure"],
+            "tags": ["NDA", "Document Type: NDA"],
+        },
+        {
+            "match": ["termination_letter", "termination-letter", "termination letter"],
+            "tags": ["Termination Letter", "Document Type: Termination Letter"],
+        },
+
+        # Lifecycle Stage
+        {
+            "match": ["pre-hire", "pre_hire", "prehire", "pre hire"],
+            "tags": ["Lifecycle: Pre-Hire"],
+        },
+        {
+            "match": ["onboarding"],
+            "tags": ["Lifecycle: Onboarding"],
+        },
+        {
+            "match": ["probation"],
+            "tags": ["Lifecycle: Probation"],
+        },
+        {
+            "match": ["post-termination", "post_termination", "post termination"],
+            "tags": ["Lifecycle: Post-Termination"],
+        },
+
+        # Clauses
+        {
+            "match": ["confidentiality"],
+            "tags": ["Clause: Confidentiality"],
+        },
+        {
+            "match": ["non_compete", "non-compete", "non compete"],
+            "tags": ["Clause: Non-Compete"],
+        },
+        {
+            "match": ["ip_assignment", "ip-assignment", "ip assignment"],
+            "tags": ["Clause: IP Assignment"],
+        },
+        {
+            "match": ["arbitration"],
+            "tags": ["Clause: Arbitration"],
+        },
+        {
+            "match": ["data_protection", "data-protection", "data protection"],
+            "tags": ["Clause: Data Protection"],
+        },
+
+        # Jurisdiction
+        {
+            "match": ["india", "_in_", "-in-", "_india_", "-india-"],
+            "tags": ["Jurisdiction: India"],
+        },
+        {
+            "match": ["_us_", "-us-", "usa", "united_states"],
+            "tags": ["Jurisdiction: US"],
+        },
+        {
+            "match": ["_uk_", "-uk-", "united_kingdom"],
+            "tags": ["Jurisdiction: UK"],
+        },
+        {
+            "match": ["cross_border", "cross-border", "cross border"],
+            "tags": ["Jurisdiction: Cross-Border"],
+        },
+
+        # Employee Type
+        {
+            "match": ["permanent_employee", "permanent-employee", "permanent employee"],
+            "tags": ["Employee Type: Permanent Employee"],
+        },
+        {
+            "match": ["consultant"],
+            "tags": ["Employee Type: Consultant"],
+        },
+        {
+            "match": ["intern"],
+            "tags": ["Employee Type: Intern"],
+        },
+        {
+            "match": ["senior_management", "senior-management", "senior management"],
+            "tags": ["Employee Type: Senior Management"],
+        },
+
+        # Risk Level
+        {
+            "match": ["high_risk", "high-risk", "high risk"],
+            "tags": ["Risk: High"],
+        },
+        {
+            "match": ["medium_risk", "medium-risk", "medium risk"],
+            "tags": ["Risk: Medium"],
+        },
+        {
+            "match": ["low_risk", "low-risk", "low risk"],
+            "tags": ["Risk: Low"],
+        },
+    ]
+
+
+
+
     def extract_tags_from_filename(self, filename):
         """Extract meaningful tags from filename"""
         # Remove file extension
@@ -112,29 +229,40 @@ class SimpleTagger:
         return tags
     
     def generate_tags(self, file_name, mime_type=None, description=None):
-        """Generate ALL tags for a file (NO LIMITS!)"""
+        """
+        Generate curated tags for a file from controlled rules.
+        No raw word-split tags.
+        """
         tags = set()
-        
-        # 1. Tags from filename - ALL TAGS (no limit)
-        filename_tags = self.extract_tags_from_filename(file_name)
-        tags.update(filename_tags)  # Add ALL filename tags
-        
-        # 2. File type tag
+        name = (file_name or "").lower()
+
+        # 1. Apply master TAG_RULES
+        for rule in self.TAG_RULES:
+            if any(pattern in name for pattern in rule["match"]):
+                for t in rule["tags"]:
+                    tags.add(t)
+
+        # 2. Optional: high-level content tags from CONTENT_KEYWORDS (coarse)
+        #    Use only if you still want 'contract', 'template', etc.
+        for tag, keywords in self.CONTENT_KEYWORDS.items():
+            if any(keyword in name for keyword in keywords):
+                tags.add(tag)
+
+        # 3. File type tag (document, image, etc.)
         if mime_type:
             file_type = self.detect_file_type(mime_type)
             tags.add(file_type)
-        
-        # 3. Content-based tags - ALL TAGS
-        content_tags = self.generate_content_tags(file_name)
-        tags.update(content_tags)  # Add ALL content tags
-        
-        # 4. Tags from description if available - ALL TAGS
+
+        # 4. (Optional) description-based rules – currently reused same patterns
         if description:
-            desc_tags = self.extract_tags_from_filename(description)
-            tags.update(desc_tags)  # Add ALL description tags
-        
-        # Return all unique tags as a list
+            desc = description.lower()
+            for rule in self.TAG_RULES:
+                if any(pattern in desc for pattern in rule["match"]):
+                    for t in rule["tags"]:
+                        tags.add(t)
+
         return list(tags)
+
     
     def get_confidence_score(self, tag, file_name, mime_type=None):
         """Calculate confidence score for a tag"""
