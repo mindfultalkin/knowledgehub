@@ -96,8 +96,8 @@ class DriveIngestionService:
 
     def _process_file(self, file_data: Dict, account_email: str = None) -> str:
         """
-        Process a single file - ONLY if new or modified
-        ✅ Strips microseconds for accurate comparison
+        Process a single file - ALWAYS create tags even if file unchanged
+        ✅ Fixed: Always calls _create_simple_tags
         """
         drive_file_id = file_data.get('id')
         file_name = file_data.get('name', 'Unknown')
@@ -129,6 +129,11 @@ class DriveIngestionService:
                 Document.drive_file_id == drive_file_id
             ).first()
             
+            # ========== THE FIX ==========
+            # ALWAYS create/update tags for every file
+            self._create_simple_tags(drive_file_id, file_data)
+            # ==============================
+            
             if existing_doc:
                 # Check if file was modified
                 db_modified_at = existing_doc.modified_at
@@ -141,14 +146,13 @@ class DriveIngestionService:
                     db_modified_at = db_modified_at.replace(microsecond=0)
                 
                 if db_modified_at and drive_modified_at <= db_modified_at:
-                    # File hasn't changed - skip everything
+                    # File hasn't changed, but we already created tags above
                     print(f"⏭️  Skipped (unchanged): {file_name}")
                     return "skipped"
-            
-            # Extract metadata
-            file_metadata = self._extract_metadata(file_data, account_email)
-            
-            if existing_doc:
+                
+                # Extract metadata
+                file_metadata = self._extract_metadata(file_data, account_email)
+                
                 # Update existing file
                 for key, value in file_metadata.items():
                     setattr(existing_doc, key, value)
@@ -157,11 +161,14 @@ class DriveIngestionService:
                 self.db.commit()
                 
                 self._queue_processing_tasks(drive_file_id)
-                self._create_simple_tags(drive_file_id, file_data)
+                # Tags already created above
                 
                 print(f"🔄 Updated: {file_name}")
                 return "updated"
             else:
+                # Extract metadata
+                file_metadata = self._extract_metadata(file_data, account_email)
+                
                 # New file
                 new_doc = Document(**file_metadata)
                 self.db.add(new_doc)
@@ -169,7 +176,7 @@ class DriveIngestionService:
                 self.db.commit()
                 
                 self._queue_processing_tasks(drive_file_id)
-                self._create_simple_tags(drive_file_id, file_data)
+                # Tags already created above
                 
                 print(f"✅ Added: {file_name} (User: {account_email})")
                 return "new"
