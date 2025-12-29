@@ -13,12 +13,23 @@
 </head>
 <body>
     <div id="app-root"></div>
+    
+    <!-- Load order is CRITICAL - follow this exact order -->
     <script src="runtime-env.js"></script>
+    <script src="config.js"></script>
+    <script src="state.js"></script>
+    <script src="modules/utils.js"></script>
+    <script src="modules/auth.js"></script>
+    <script src="modules/search.js"></script>
+    <script src="modules/ui.js"></script>
+    <script src="modules/views.js"></script>
+    <script src="modules/clauses.js"></script>
+    <script src="modules/modals.js"></script>
     <script src="app.js"></script>
     
-    <!-- Document Details Modal -->
+    <!-- Document Details Modal - Keep this HTML structure -->
     <div id="documentModal" class="modal">
-        <div class="modal-overlay" onclick="closeModal()"></div>
+        <div class="modal-overlay" onclick="window.closeModal()"></div>
         <div class="modal-content">
             <!-- Modal Header w/ Toggle Buttons -->
             <div class="modal-header">
@@ -27,49 +38,55 @@
                     <p id="modalSubtitle" class="modal-subtitle"></p>
                 </div>
                 <div class="toggle-buttons">
-                    <button id="showClausesBtn" class="toggle-btn active" onclick="toggleView('clauses')">
+                    <button id="showClausesBtn" class="toggle-btn active" onclick="window.toggleView('clauses')">
                         📋 Show Clauses
                     </button>
-                    <button id="showRiskBtn" class="toggle-btn" onclick="toggleView('risk')">
+                    <button id="showRiskBtn" class="toggle-btn" onclick="window.toggleView('risk')">
                         📊 Show Risk Score
                     </button>
                 </div>
-                <button class="close-btn" onclick="closeModal()">×</button>
+                <button class="close-btn" onclick="window.closeModal()">×</button>
             </div>
+            
             <!-- CLAUSES VIEW (DEFAULT) -->
             <div id="clausesView" class="modal-view active" style="display: block;">
-                <div class="modal-body three-column-layout">
-                    <!-- Clauses Column -->
-                    <div class="modal-column clauses-column">
-                        <h3>📋 Clauses</h3>
-                        <div id="clausesList" class="clauses-list">
-                            <div class="loading-state">Loading clauses...</div>
-                        </div>
-                    </div>
-                    <!-- Tags + Clause Content -->
-                    <div class="modal-column content-column">
-                        <h3>🏷️ Tags</h3>
-                        <div id="tagsContainer" class="tags-content"></div>
-                        <div id="selectedClauseContainer" class="selected-clause-container" style="display: none;">
-                            <h3>📄 Selected Clause</h3>
-                            <div class="clause-display">
-                                <h4 id="selectedClauseTitle"></h4>
-                                <div id="selectedClauseContent" class="clause-content"></div>
-                                <button id="saveToLibraryBtn" class="btn-save-library" onclick="saveClauseToLibrary()">
-                                    💾 Save to Library
-                                </button>
+                <div class="modal-body">
+                    <div class="three-column-layout">
+                        <!-- Clauses Column -->
+                        <div class="modal-column clauses-column">
+                            <h3>📋 Clauses</h3>
+                            <div id="clausesList" class="clauses-list">
+                                <div class="loading-state">Loading clauses...</div>
                             </div>
                         </div>
-                    </div>
-                    <!-- Similar Files -->
-                    <div class="modal-column info-column">
-                        <h3>🔗 Similar Files</h3>
-                        <div id="similarFilesContent" class="similar-files-content">
-                            <div class="empty-state">Select a clause to find similar files</div>
+                        
+                        <!-- Tags + Clause Content -->
+                        <div class="modal-column content-column">
+                            <h3>🏷️ Tags</h3>
+                            <div id="tagsContainer" class="tags-content"></div>
+                            <div id="selectedClauseContainer" class="selected-clause-container" style="display: none;">
+                                <h3>📄 Selected Clause</h3>
+                                <div class="clause-display">
+                                    <h4 id="selectedClauseTitle"></h4>
+                                    <div id="selectedClauseContent" class="clause-content"></div>
+                                    <button id="saveToLibraryBtn" class="btn-save-library" onclick="window.saveClauseToLibrary()">
+                                        💾 Save to Library
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Similar Files -->
+                        <div class="modal-column info-column">
+                            <h3>🔗 Similar Files</h3>
+                            <div id="similarFilesContent" class="similar-files-content">
+                                <div class="empty-state">Select a clause to find similar files</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+            
             <!-- RISK SCORE TOGGLE VIEW (hidden initially) -->
             <div id="riskView" class="modal-view" style="display: none;">
                 <div class="risk-score-section">
@@ -94,15 +111,13 @@
                     </div>
                 </div>
             </div>
+            
             <!-- Modal Footer -->
-            <div id="modalFooter" class="modal-footer" style="display: flex; justify-content: flex-end; gap: 12px; padding: 18px 24px; border-top: 1px solid #EEE;">
-                <button id="driveBtn"
-                        class="btn-secondary btn-drive"
-                        style="font-size:0.97rem; padding:0.37rem 1.1rem; min-width:unset; border-radius:6px;">
+            <div class="modal-footer">
+                <button id="driveBtn" class="btn-secondary">
                     📂 Open in Google Drive
                 </button>
-                <button onclick="closeModal()" class="btn-primary"
-                        style="font-size: 1rem; border-radius: 6px; padding:0.5rem 1.3rem;">
+                <button onclick="window.closeModal()" class="btn-primary">
                     Close
                 </button>
             </div>
