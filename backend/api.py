@@ -801,51 +801,51 @@ async def nlp_search(query: str, top_k: int = 10, min_score: float = 0.3):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
     
-@router.get("/search/ai")
-async def ai_search(query: str, top_k: int = 10, min_score: float = 0.3):
-    """AI Search endpoint - semantic search"""
-    try:
-        if not drive_client or not drive_client.creds:
-            raise HTTPException(status_code=401, detail="Not authenticated")
+# @router.get("/search/ai")
+# async def ai_search(query: str, top_k: int = 10, min_score: float = 0.3):
+#     """AI Search endpoint - semantic search"""
+#     try:
+#         if not drive_client or not drive_client.creds:
+#             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        if not nlp_engine:
-            raise HTTPException(status_code=500, detail="NLP engine not initialized")
+#         if not nlp_engine:
+#             raise HTTPException(status_code=500, detail="NLP engine not initialized")
 
-        if not nlp_engine.is_trained:
-            model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
-            if os.path.exists(model_path):
-                nlp_engine.load_model(model_path)
-            else:
-                raise HTTPException(status_code=400, detail="NLP model not trained. Please train first.")
+#         if not nlp_engine.is_trained:
+#             model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
+#             if os.path.exists(model_path):
+#                 nlp_engine.load_model(model_path)
+#             else:
+#                 raise HTTPException(status_code=400, detail="NLP model not trained. Please train first.")
 
-        results = nlp_engine.search(query, top_k=top_k, min_score=min_score)
+#         results = nlp_engine.search(query, top_k=top_k, min_score=min_score)
 
-        formatted_results = []
-        for result in results:
-            doc = result["document"]
-            formatted_results.append(
-                {
-                    "id": doc["id"],
-                    "name": doc["name"],
-                    "mimeType": doc.get("mimeType", ""),
-                    "score": result["score"],
-                    "relevance": result["relevance"],
-                    "snippet": (doc.get("content", "")[:200] + "...") if doc.get("content") else "",
-                    "owner": doc.get("owner", "Unknown"),
-                    "modifiedTime": doc.get("modifiedTime", ""),
-                    "webViewLink": doc.get("webViewLink", ""),
-                    "size": doc.get("size", "0"),
-                }
-            )
+#         formatted_results = []
+#         for result in results:
+#             doc = result["document"]
+#             formatted_results.append(
+#                 {
+#                     "id": doc["id"],
+#                     "name": doc["name"],
+#                     "mimeType": doc.get("mimeType", ""),
+#                     "score": result["score"],
+#                     "relevance": result["relevance"],
+#                     "snippet": (doc.get("content", "")[:200] + "...") if doc.get("content") else "",
+#                     "owner": doc.get("owner", "Unknown"),
+#                     "modifiedTime": doc.get("modifiedTime", ""),
+#                     "webViewLink": doc.get("webViewLink", ""),
+#                     "size": doc.get("size", "0"),
+#                 }
+#             )
 
-        return {
-            "query": query,
-            "results": formatted_results,
-            "total_results": len(formatted_results),
-        }
+#         return {
+#             "query": query,
+#             "results": formatted_results,
+#             "total_results": len(formatted_results),
+#         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 # =====================Add note HERE====================
 
