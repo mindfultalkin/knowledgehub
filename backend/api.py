@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 import os
 import json
 from models.metadata import DocumentTag, Tag
-from nlp_search import NLPSearchEngine
+# from nlp_search import NLPSearchEngine
 from models.metadata import DocumentChunk, VectorEmbedding
 
 # Import config FIRST
