@@ -11,7 +11,6 @@ backend_dir = os.path.dirname(os.path.abspath(__file__))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-
 from config import ALLOWED_ORIGINS
 from api import router
 from database import SessionLocal, Base, engine, init_database, get_db
@@ -135,26 +134,32 @@ if os.path.exists(frontend_path):
 
 @app.on_event("startup")
 async def startup_event():
-    """Run initialization tasks on startup"""
+    """Run initialization tasks on startup - RAILWAY SAFE"""
     print("🚀 Starting Knowledge Hub Application...")
     
     db_success = init_database()
     
     if db_success:
         print("✅ Database initialized successfully")
-        asyncio.create_task(auto_extract_clauses_on_startup())
+        
+        # ✅ RAILWAY SAFE: Skip auto_extract_clauses_on_startup() - causes faiss crash
+        if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+            print("🚇 Railway detected - skipping auto-extraction (faiss safe)")
+        else:
+            print("🏠 Local - running auto-extraction")
+            asyncio.create_task(auto_extract_clauses_on_startup())
     else:
-        print("⚠️  Application starting without database connection")
+        print("⚠️ Application starting without database connection")
 
-
+# ✅ DISABLE auto_extract_clauses_on_startup for Railway
 async def auto_extract_clauses_on_startup():
-    """Background task to automatically extract clauses from all documents"""
-    await asyncio.sleep(10)
-    
+    """Background task - SKIPPED on Railway"""
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        print("🚇 Railway environment detected - skipping auto extraction on startup")
+        print("🚇 Skipping clause extraction on Railway (faiss safe)")
         return
         
+    await asyncio.sleep(10)
+    
     try:
         print("\n🔄 Starting automatic clause extraction...")
         
