@@ -247,18 +247,69 @@ class ContentBasedTagger:
 
 
 class SimpleTagger:
-    """Enhanced SimpleTagger with ONLY content-based tagging"""
+    """Enhanced SimpleTagger with content-based tagging"""
     
     def __init__(self):
         self.content_tagger = ContentBasedTagger()
     
-    def generate_tags(self, file_name, mime_type=None, description=None):
+    def generate_tags(self, file_name, mime_type=None, description=None, document_text=None):
         """
         Generate tags STRICTLY from content analysis
-        If no content available, return empty list
-        """
-        tags = set()
         
-        # We need document text - we'll get it from the database or file
-        # For now, return empty - actual tagging happens in drive_ingestion.py
-        return list(tags)
+        Returns:
+            List of tag names that match the content (from master taxonomy ONLY)
+        """
+        if not document_text:
+            # If no text, use filename as fallback
+            document_text = file_name
+        
+        # Get tags from content analysis
+        tags = self.content_tagger.extract_tags_from_text(document_text)
+        
+        # If no content tags, try filename analysis
+        if not tags:
+            tags = self._extract_tags_from_filename(file_name)
+        
+        return tags
+    
+    def _extract_tags_from_filename(self, filename: str) -> List[str]:
+        """Extract tags from filename using master taxonomy keywords"""
+        filename_lower = filename.lower()
+        tags_found = set()
+        
+        # Check each category and tag in master taxonomy
+        for category, tag_dict in ContentBasedTagger.MASTER_TAXONOMY.items():
+            for tag_name, keywords in tag_dict.items():
+                # Check if ANY keyword is in the filename
+                for keyword in keywords:
+                    if keyword.lower() in filename_lower:
+                        # Format: "Category: Tag Name" (except for Document Type)
+                        if category == "Document Type":
+                            tags_found.add(tag_name)
+                        else:
+                            tags_found.add(f"{category}: {tag_name}")
+                        break  # Found one keyword, move to next tag
+        
+        return list(tags_found)
+    
+    def detect_file_type(self, mime_type):
+        """Simple file type detection"""
+        if not mime_type:
+            return 'file'
+        
+        if 'pdf' in mime_type:
+            return 'pdf'
+        elif 'word' in mime_type or 'document' in mime_type:
+            return 'document'
+        elif 'spreadsheet' in mime_type or 'excel' in mime_type:
+            return 'spreadsheet'
+        elif 'presentation' in mime_type or 'powerpoint' in mime_type:
+            return 'presentation'
+        elif 'image' in mime_type:
+            return 'image'
+        elif 'video' in mime_type:
+            return 'video'
+        elif 'audio' in mime_type:
+            return 'audio'
+        else:
+            return 'file'  

@@ -215,8 +215,8 @@ class DriveIngestionService:
 
     def _create_simple_tags(self, document_id: str, file_data: Dict):
         """
-        Create tags based on document CONTENT (not filename)
-        ALWAYS creates tags, even if some files fail
+        Create tags based on document CONTENT
+        Creates tags in database ONLY when found in content
         """
         # Get document from database
         doc = self.db.query(Document).filter(Document.id == document_id).first()
@@ -230,130 +230,149 @@ class DriveIngestionService:
         
         print(f"🔍 Analyzing content for tags: {file_name}")
         
-        # Try to get document text from extracted text file
+        # STEP 1: Extract text from document
+        document_text = self._extract_document_text(doc, file_name)
+        
+        if not document_text or len(document_text) < 10:
+            print(f"ℹ️  No text content found for: {file_name}")
+            # Use filename as text for tagging
+            document_text = file_name
+        
+        # STEP 2: Generate tags from content
+        tags_to_create = self.tagger.generate_tags(
+            file_name=file_name,
+            mime_type=doc.mime_type,
+            document_text=document_text
+        )
+        
+        if not tags_to_create:
+            print(f"ℹ️  No tags found for: {file_name}")
+            return
+        
+        print(f"🏷️  Creating content-based tags for {file_name}: {tags_to_create}")
+        
+        # STEP 3: Save tags to database
+        self._save_tags_to_database(doc.id, tags_to_create)
+    
+    def _extract_document_text(self, doc, file_name: str) -> str:
+        """Extract text from document file"""
         document_text = ""
+        
+        # Try to get document text from extracted text file
         if hasattr(doc, 'derived_text_path') and doc.derived_text_path:
             try:
                 with open(doc.derived_text_path, 'r', encoding='utf-8') as f:
                     document_text = f.read()
                 print(f"📖 Found extracted text: {len(document_text)} characters")
+                return document_text
             except Exception as e:
                 print(f"⚠️ Could not read extracted text: {e}")
-                document_text = ""
         
         # If no extracted text, try to extract from temp file
-        if not document_text:
-            temp_file_path = os.path.join('temp_downloads', f"{doc.id}.temp")
-            if os.path.exists(temp_file_path):
-                try:
-                    # Simple text extraction with error handling
-                    if doc.mime_type == 'application/pdf' and PDF_EXTRACTION_AVAILABLE:
-                        with open(temp_file_path, 'rb') as f:
-                            pdf_reader = PyPDF2.PdfReader(f)
-                            for page in pdf_reader.pages:
-                                page_text = page.extract_text()
-                                if page_text:
-                                    document_text += page_text + "\n"
-                    
-                    elif doc.mime_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                          'application/msword'] and DOCX_EXTRACTION_AVAILABLE:
-                        docx = DocxDocument(temp_file_path)
-                        for para in docx.paragraphs:
-                            if para.text:
-                                document_text += para.text + "\n"
-                    
-                    elif doc.mime_type == 'text/plain':
-                        with open(temp_file_path, 'r', encoding='utf-8') as f:
-                            document_text = f.read()
-                    
-                    print(f"📖 Extracted text directly: {len(document_text)} characters")
-                except Exception as e:
-                    print(f"⚠️ Could not extract text: {e}")
-        
-        # If still no text, use filename as content
-        if not document_text or len(document_text) < 10:
-            print(f"ℹ️  No text content found for: {file_name}, using filename")
-            document_text = file_name
-        
-        # Generate tags from content
-        try:
-            from tagging import ContentBasedTagger
-            content_tagger = ContentBasedTagger()
-            tags_to_create = content_tagger.extract_tags_from_text(document_text)
-            
-            if not tags_to_create:
-                print(f"ℹ️  No content-based tags found for: {file_name}")
-                # Still try filename-based tags as fallback
-                tags_to_create = []
-                name_lower = file_name.lower()
+        temp_file_path = os.path.join('temp_downloads', f"{doc.id}.temp")
+        if os.path.exists(temp_file_path):
+            try:
+                # Simple text extraction
+                if doc.mime_type == 'application/pdf' and PDF_EXTRACTION_AVAILABLE:
+                    with open(temp_file_path, 'rb') as f:
+                        pdf_reader = PyPDF2.PdfReader(f)
+                        for page in pdf_reader.pages:
+                            page_text = page.extract_text()
+                            if page_text:
+                                document_text += page_text + "\n"
                 
-                # Simple filename matching
-                if "employment" in name_lower and "agreement" in name_lower:
-                    tags_to_create.append("Employment Agreement")
-                elif "offer" in name_lower and "letter" in name_lower:
-                    tags_to_create.append("Offer Letter")
-                elif "consultancy" in name_lower or "consulting" in name_lower:
-                    tags_to_create.append("Consultancy Agreement")
-                elif "nda" in name_lower or "non-disclosure" in name_lower:
-                    tags_to_create.append("NDA")
-                elif "termination" in name_lower:
-                    tags_to_create.append("Termination Letter")
-                elif "policy" in name_lower:
-                    tags_to_create.append("HR Policy")
-            
-        except Exception as e:
-            print(f"⚠️ Error in content tagger: {e}")
-            tags_to_create = []
+                elif doc.mime_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      'application/msword'] and DOCX_EXTRACTION_AVAILABLE:
+                    docx = DocxDocument(temp_file_path)
+                    for para in docx.paragraphs:
+                        if para.text:
+                            document_text += para.text + "\n"
+                
+                elif doc.mime_type == 'text/plain':
+                    with open(temp_file_path, 'r', encoding='utf-8') as f:
+                        document_text = f.read()
+                
+                print(f"📖 Extracted text directly: {len(document_text)} characters")
+                
+            except Exception as e:
+                print(f"⚠️ Could not extract text: {e}")
         
-        if not tags_to_create:
-            print(f"ℹ️  No tags created for: {file_name}")
-            return
-        
-        print(f"🏷️  Creating content-based tags for {file_name}: {tags_to_create}")
-        
+        return document_text
+    
+    def _save_tags_to_database(self, document_id: str, tags_to_create: List[str]):
+        """Save tags to database, creating them if they don't exist"""
         try:
             # Remove any existing tags first (clean slate)
             existing_tags = self.db.query(DocumentTag).filter(
-                DocumentTag.document_id == doc.id
+                DocumentTag.document_id == document_id
             ).all()
             for tag in existing_tags:
                 self.db.delete(tag)
             
             tags_added = 0
             for tag_name in set(tags_to_create):
-                # Find tag in master taxonomy
+                # Check if tag is in master taxonomy
+                if not self._is_tag_in_master_taxonomy(tag_name):
+                    print(f"   ⏭️ Skipping: {tag_name} (not in master taxonomy)")
+                    continue
+                
+                # Find or create tag in database
                 tag = self.db.query(Tag).filter(Tag.name == tag_name).first()
                 if not tag:
-                    # Try without category prefix
+                    # Create new tag
+                    category = "custom"
                     if ": " in tag_name:
-                        simple_name = tag_name.split(": ")[1]
-                        tag = self.db.query(Tag).filter(Tag.name == simple_name).first()
-                
-                if tag:
-                    doc_tag = DocumentTag(
-                        document_id=doc.id,
-                        tag_id=tag.id,
-                        confidence_score=1.0,
-                        source='content_analysis',
-                        created_at=datetime.utcnow()
+                        category = tag_name.split(": ")[0]
+                    
+                    tag = Tag(
+                        name=tag_name,
+                        category=category,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
                     )
-                    self.db.add(doc_tag)
-                    tags_added += 1
-                    print(f"   ✅ Added tag: {tag_name}")
-                else:
-                    print(f"   ⏭️ Skipping: {tag_name} (not in master list)")
+                    self.db.add(tag)
+                    self.db.flush()  # Get the ID
+                    print(f"   📝 Created new tag: {tag_name}")
+                
+                # Link tag to document
+                doc_tag = DocumentTag(
+                    document_id=document_id,
+                    tag_id=tag.id,
+                    confidence_score=1.0,
+                    source='content_analysis',
+                    created_at=datetime.utcnow()
+                )
+                self.db.add(doc_tag)
+                tags_added += 1
+                print(f"   ✅ Added tag: {tag_name}")
             
             if tags_added > 0:
                 self.db.commit()
-                print(f"🎉 Added {tags_added} tags for: {file_name}")
+                print(f"🎉 Added {tags_added} tags to database")
             else:
-                print(f"ℹ️  No valid tags found in master list for: {file_name}")
+                print(f"ℹ️  No valid tags to save")
             
         except Exception as e:
             self.db.rollback()
-            print(f"❌ Error creating tags for {file_name}: {e}")
+            print(f"❌ Error saving tags: {e}")
             import traceback
             print(traceback.format_exc())
+    
+    def _is_tag_in_master_taxonomy(self, tag_name: str) -> bool:
+        """Check if a tag is in the master taxonomy"""
+        from tagging import ContentBasedTagger
+        
+        # Remove category prefix for checking
+        check_name = tag_name
+        if ": " in tag_name:
+            check_name = tag_name.split(": ")[1]
+        
+        # Check all categories in master taxonomy
+        for category, tag_dict in ContentBasedTagger.MASTER_TAXONOMY.items():
+            if check_name in tag_dict:
+                return True
+        
+        return False
 
     def _extract_metadata(self, file_data: Dict, account_email: str = None) -> Dict:
         """
