@@ -1,10 +1,10 @@
-// modules/auth.js - Authentication & Google Drive
+// modules/auth.js - Authentication & Google Drive (PRODUCTION FIXED)
 console.log('Loading auth.js...');
 
-// Check auth status
+// Check auth status - FIXED
 async function checkAuthStatus() {
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/auth/status`);  // ✅ Added /api
+    const response = await fetch(`${window.API_BASE_URL}/api/auth/status`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -16,10 +16,11 @@ async function checkAuthStatus() {
     return { authenticated: false };
   }
 }
-// Initiate Google Auth
+
+// Initiate Google Auth - FIXED
 async function initiateGoogleAuth() {
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/auth/google`);  // ✅ Added /api
+    const response = await fetch(`${window.API_BASE_URL}/api/auth/google`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -30,7 +31,8 @@ async function initiateGoogleAuth() {
     alert('Failed to start Google authentication. Please try again.');
   }
 }
-// Load files from Drive
+
+// Load files from Drive - FIXED
 async function loadFiles() {
   if (!window.appState.authenticated) {
     return;
@@ -40,7 +42,7 @@ async function loadFiles() {
   if (window.renderCurrentView) window.renderCurrentView();
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
+    const response = await fetch(`${window.API_BASE_URL}/api/drive/files?page_size=100`);
     if (!response.ok) {
       throw new Error('Failed to load files');
     }
@@ -58,14 +60,17 @@ async function loadFiles() {
   }
 }
 
-// Load drive info
+// Load drive info - FIXED
 async function loadDriveInfo() {
   if (!window.appState.authenticated) {
     return;
   }
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/drive/connection-status`);
+    const response = await fetch(`${window.API_BASE_URL}/api/drive/connection-status`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     const data = await response.json();
     window.appState.driveInfo = data;
   } catch (error) {
@@ -73,18 +78,18 @@ async function loadDriveInfo() {
   }
 }
 
-// Refresh files
+// Refresh files - FIXED
 async function refreshFiles() {
   window.showNotification('🔄 Refreshing files from Google Drive...', 'info');
 
   try {
-    const syncRes = await fetch(`${window.API_BASE_URL}/sync/drive-full`, { method: 'POST' });
+    const syncRes = await fetch(`${window.API_BASE_URL}/api/sync/drive-full`, { method: 'POST' });
     if (!syncRes.ok) {
       window.showNotification('❌ Sync failed. Check backend logs.', 'error');
       return;
     }
 
-    const filesRes = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
+    const filesRes = await fetch(`${window.API_BASE_URL}/api/drive/files?page_size=100`);
     if (!filesRes.ok) throw new Error('Failed to load files');
 
     const data = await filesRes.json();
@@ -108,10 +113,11 @@ function voiceRecord() {
   window.showNotification('🎤 Voice Recording feature coming soon!', 'info');
 }
 
-// Logout user
+// Logout user - FIXED
 async function logoutUser() {
   if (confirm('Are you sure you want to logout? You will need to reconnect to Google Drive.')) {
     try {
+      // Clear local authentication state
       window.appState.authenticated = false;
       window.appState.files = [];
       window.appState.filteredFiles = [];
@@ -119,7 +125,7 @@ async function logoutUser() {
       
       window.showNotification('🔓 Logging out...', 'info');
       
-      // ✅ FIXED: Added /api
+      // Clear any stored tokens from backend - FIXED
       try {
         await fetch(`${window.API_BASE_URL}/api/auth/logout`, {
           method: 'POST'
@@ -128,11 +134,12 @@ async function logoutUser() {
         console.log('Logout endpoint not available, clearing locally');
       }
       
-      // Rest of function stays same...
+      // Redirect to dashboard after short delay
       setTimeout(() => {
         window.appState.currentView = 'dashboard';
         if (window.renderCurrentView) window.renderCurrentView();
         
+        // Update connection status
         const statusEl = document.getElementById('connectionStatus');
         if (statusEl) {
           statusEl.innerHTML = `
@@ -160,3 +167,6 @@ window.refreshFiles = refreshFiles;
 window.uploadFiles = uploadFiles;
 window.voiceRecord = voiceRecord;
 window.logoutUser = logoutUser;
+
+console.log('✅ auth.js loaded - all functions ready');
+
