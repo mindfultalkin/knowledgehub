@@ -68,7 +68,7 @@ async function initApp() {
     </div>
     
     <footer class="app-footer">
-      <p>Knowledge Hub © 2025 | Connected to Your Google Drive | Version 1.0.0</p>
+      <p>Knowledge Hub © 2025 | Connected to Your Google Drive | Version 1.0.1</p>
     </footer>
   `;
   
