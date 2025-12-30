@@ -1,13 +1,10 @@
-// modules/auth.js - Authentication & Google Drive (PRODUCTION FIXED)
+// modules/auth.js - Authentication & Google Drive
 console.log('Loading auth.js...');
 
-// Check auth status - FIXED
+// Check auth status
 async function checkAuthStatus() {
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/auth/status`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    const response = await fetch(`${window.API_BASE_URL}/auth/status`);
     const data = await response.json();
     window.appState.authenticated = data.authenticated;
     return data;
@@ -17,13 +14,10 @@ async function checkAuthStatus() {
   }
 }
 
-// Initiate Google Auth - FIXED
+// Initiate Google Auth
 async function initiateGoogleAuth() {
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/auth/google`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    const response = await fetch(`${window.API_BASE_URL}/auth/google`);
     const data = await response.json();
     window.location.href = data.auth_url;
   } catch (error) {
@@ -32,7 +26,7 @@ async function initiateGoogleAuth() {
   }
 }
 
-// Load files from Drive - FIXED
+// Load files from Drive
 async function loadFiles() {
   if (!window.appState.authenticated) {
     return;
@@ -42,7 +36,7 @@ async function loadFiles() {
   if (window.renderCurrentView) window.renderCurrentView();
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/drive/files?page_size=100`);
+    const response = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
     if (!response.ok) {
       throw new Error('Failed to load files');
     }
@@ -60,17 +54,14 @@ async function loadFiles() {
   }
 }
 
-// Load drive info - FIXED
+// Load drive info
 async function loadDriveInfo() {
   if (!window.appState.authenticated) {
     return;
   }
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/drive/connection-status`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    const response = await fetch(`${window.API_BASE_URL}/drive/connection-status`);
     const data = await response.json();
     window.appState.driveInfo = data;
   } catch (error) {
@@ -78,18 +69,18 @@ async function loadDriveInfo() {
   }
 }
 
-// Refresh files - FIXED
+// Refresh files
 async function refreshFiles() {
   window.showNotification('🔄 Refreshing files from Google Drive...', 'info');
 
   try {
-    const syncRes = await fetch(`${window.API_BASE_URL}/api/sync/drive-full`, { method: 'POST' });
+    const syncRes = await fetch(`${window.API_BASE_URL}/sync/drive-full`, { method: 'POST' });
     if (!syncRes.ok) {
       window.showNotification('❌ Sync failed. Check backend logs.', 'error');
       return;
     }
 
-    const filesRes = await fetch(`${window.API_BASE_URL}/api/drive/files?page_size=100`);
+    const filesRes = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
     if (!filesRes.ok) throw new Error('Failed to load files');
 
     const data = await filesRes.json();
@@ -113,7 +104,7 @@ function voiceRecord() {
   window.showNotification('🎤 Voice Recording feature coming soon!', 'info');
 }
 
-// Logout user - FIXED
+// Logout user
 async function logoutUser() {
   if (confirm('Are you sure you want to logout? You will need to reconnect to Google Drive.')) {
     try {
@@ -125,9 +116,9 @@ async function logoutUser() {
       
       window.showNotification('🔓 Logging out...', 'info');
       
-      // Clear any stored tokens from backend - FIXED
+      // Clear any stored tokens from backend
       try {
-        await fetch(`${window.API_BASE_URL}/api/auth/logout`, {
+        await fetch(`${window.API_BASE_URL}/auth/logout`, {
           method: 'POST'
         });
       } catch (e) {
@@ -167,6 +158,3 @@ window.refreshFiles = refreshFiles;
 window.uploadFiles = uploadFiles;
 window.voiceRecord = voiceRecord;
 window.logoutUser = logoutUser;
-
-console.log('✅ auth.js loaded - all functions ready');
-

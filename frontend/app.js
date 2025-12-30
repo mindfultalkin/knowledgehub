@@ -68,7 +68,7 @@ async function initApp() {
     </div>
     
     <footer class="app-footer">
-      <p>Knowledge Hub © 2025 | Connected to Your Google Drive | Version 1.0.1</p>
+      <p>Knowledge Hub © 2025 | Connected to Your Google Drive | Version 1.0.0</p>
     </footer>
   `;
   
@@ -288,57 +288,27 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// ✅ FIXED: Replace your entire DOMContentLoaded section with this:
+// Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM loaded, initializing app...');
   
-  // 🔄 ROBUST RETRY LOOP - waits for ALL modules
-  let retryCount = 0;
-  const maxRetries = 50;
-  
-  function tryInit() {
-    retryCount++;
-    console.log(`🔄 Init attempt ${retryCount}/${maxRetries}`);
-    
-    // ✅ CHECK ALL DEPENDENCIES
-    if (typeof window.checkAuthStatus !== 'function' || 
-        typeof window.appState === 'undefined' ||
-        !window.appState || 
-        !document.getElementById('app-root')) {
-      
-      if (retryCount < maxRetries) {
-        setTimeout(tryInit, 100);
-        return;
-      }
-      
-      console.error('❌ Max retries reached - modules not loaded');
-      showErrorScreen('Modules failed to load. Please refresh.');
-      return;
-    }
-    
-    // ✅ ALL READY - Initialize!
-    console.log('✅ All modules ready - starting app');
+  // Small delay to ensure all modules are loaded
+  setTimeout(() => {
     initApp().catch(error => {
       console.error('Failed to initialize app:', error);
-      showErrorScreen(error.message);
+      const root = document.getElementById('app-root');
+      if (root) {
+        root.innerHTML = `
+            <div style="padding: 2rem; text-align: center; color: red;">
+                <h2>Application Error</h2>
+                <p>${error.message}</p>
+                <p>Please check console for details</p>
+                <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Reload Page
+                </button>
+            </div>
+        `;
+      }
     });
-  }
-  
-  function showErrorScreen(message) {
-    const root = document.getElementById('app-root');
-    if (root) {
-      root.innerHTML = `
-        <div style="padding: 2rem; text-align: center; color: #666; max-width: 500px; margin: 0 auto;">
-          <h2>🚧 App Loading Error</h2>
-          <p>${message}</p>
-          <button onclick="location.reload()" style="margin-top: 1rem; padding: 12px 24px; background: #2196f3; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px;">
-            🔄 Reload App
-          </button>
-        </div>
-      `;
-    }
-  }
-  
-  // Start retry loop
-  tryInit();
+  }, 100);
 });
