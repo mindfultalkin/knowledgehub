@@ -4,7 +4,10 @@ console.log('Loading auth.js...');
 // Check auth status
 async function checkAuthStatus() {
   try {
-    const response = await fetch(`${window.API_BASE_URL}/auth/status`);
+    const response = await fetch(`${window.API_BASE_URL}/api/auth/status`);  // ✅ Added /api
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     const data = await response.json();
     window.appState.authenticated = data.authenticated;
     return data;
@@ -13,11 +16,13 @@ async function checkAuthStatus() {
     return { authenticated: false };
   }
 }
-
 // Initiate Google Auth
 async function initiateGoogleAuth() {
   try {
-    const response = await fetch(`${window.API_BASE_URL}/auth/google`);
+    const response = await fetch(`${window.API_BASE_URL}/api/auth/google`);  // ✅ Added /api
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     const data = await response.json();
     window.location.href = data.auth_url;
   } catch (error) {
@@ -25,7 +30,6 @@ async function initiateGoogleAuth() {
     alert('Failed to start Google authentication. Please try again.');
   }
 }
-
 // Load files from Drive
 async function loadFiles() {
   if (!window.appState.authenticated) {
@@ -108,7 +112,6 @@ function voiceRecord() {
 async function logoutUser() {
   if (confirm('Are you sure you want to logout? You will need to reconnect to Google Drive.')) {
     try {
-      // Clear local authentication state
       window.appState.authenticated = false;
       window.appState.files = [];
       window.appState.filteredFiles = [];
@@ -116,21 +119,20 @@ async function logoutUser() {
       
       window.showNotification('🔓 Logging out...', 'info');
       
-      // Clear any stored tokens from backend
+      // ✅ FIXED: Added /api
       try {
-        await fetch(`${window.API_BASE_URL}/auth/logout`, {
+        await fetch(`${window.API_BASE_URL}/api/auth/logout`, {
           method: 'POST'
         });
       } catch (e) {
         console.log('Logout endpoint not available, clearing locally');
       }
       
-      // Redirect to dashboard after short delay
+      // Rest of function stays same...
       setTimeout(() => {
         window.appState.currentView = 'dashboard';
         if (window.renderCurrentView) window.renderCurrentView();
         
-        // Update connection status
         const statusEl = document.getElementById('connectionStatus');
         if (statusEl) {
           statusEl.innerHTML = `
