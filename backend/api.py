@@ -4,9 +4,10 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 import os
 import json
-from models.metadata import DocumentTag, Tag
-# from nlp_search import NLPSearchEngine
+from models.metadata import DocumentTag
 from models.metadata import DocumentChunk, VectorEmbedding
+from models.metadata import Document, DocumentTag, Tag
+
 
 # Import config FIRST
 import config
@@ -145,8 +146,7 @@ try:
     from tagging import SimpleTagger
     tagger = SimpleTagger()
     
-    doc_processor = DocumentProcessor(drive_client)
-    nlp_engine = NLPSearchEngine()              # <-- NO db parameter
+    doc_processor = DocumentProcessor(drive_client)             # <-- NO db parameter
     simple_searcher = SimpleTextSearch(drive_client)
 
     if os.getenv("VERCEL_ENV") != "production":
@@ -691,224 +691,6 @@ async def get_all_tags():
         "categories": list(tagger.CATEGORIES.keys()),
         "contentTags": list(tagger.CONTENT_KEYWORDS.keys())
     }
-
-
-# ==================== NLP SEARCH ROUTES ====================
-
-from config import MODELS_DIR
-import os
-
-@router.post("/nlp/train")
-async def train_nlp_model():
-    """Train NLP model on all Google Drive files"""
-    try:
-        print("🔄 Starting NLP training...")
-
-        if not drive_client or not drive_client.creds:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-
-        if not doc_processor:
-            raise HTTPException(status_code=500, detail="Document processor not initialized")
-
-        if not nlp_engine:
-            raise HTTPException(status_code=500, detail="NLP engine not initialized")
-
-        # Get all files
-        print("📁 Fetching files from Google Drive...")
-        files_response = drive_client.list_files(page_size=1000)
-        files = files_response.get("files", [])
-        print(f"✅ Found {len(files)} files total")
-
-        # Process files and extract content
-        print("🔍 Processing files and extracting content...")
-        documents = doc_processor.prepare_documents_for_nlp(files)
-        print(f"📄 Successfully processed {len(documents)} documents with content")
-
-        if not documents:
-            return {
-                "message": "No processable documents found",
-                "total_files": len(files),
-                "documents_processed": 0,
-                "model_saved": False,
-            }
-
-        # Train NLP model
-        print("🤖 Training NLP model with embeddings...")
-        nlp_engine.create_embeddings(documents)
-
-        # Save model
-        model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
-        nlp_engine.save_model(model_path)
-
-        print("🎉 NLP training completed successfully!")
-
-        return {
-            "message": "NLP model trained successfully",
-            "total_files": len(files),
-            "documents_processed": len(documents),
-            "model_saved": True,
-        }
-
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
-
-
-@router.get("/nlp/search")
-async def nlp_search(query: str, top_k: int = 10, min_score: float = 0.3):
-    """Search using NLP semantic search"""
-    try:
-        if not drive_client or not drive_client.creds:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-
-        if not nlp_engine:
-            raise HTTPException(status_code=500, detail="NLP engine not initialized")
-
-        if not nlp_engine.is_trained:
-            model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
-            if os.path.exists(model_path):
-                nlp_engine.load_model(model_path)
-            else:
-                raise HTTPException(status_code=400, detail="NLP model not trained. Please train first.")
-
-        results = nlp_engine.search(query, top_k=top_k, min_score=min_score)
-
-        formatted_results = []
-        for result in results:
-            doc = result["document"]
-            formatted_results.append(
-                {
-                    "id": doc["id"],
-                    "name": doc["name"],
-                    "mimeType": doc.get("mimeType", ""),
-                    "score": result["score"],
-                    "relevance": result["relevance"],
-                    "snippet": (doc.get("content", "")[:200] + "...") if doc.get("content") else "",
-                    "owner": doc.get("owner", "Unknown"),
-                    "modifiedTime": doc.get("modifiedTime", ""),
-                    "webViewLink": doc.get("webViewLink", ""),
-                    "size": doc.get("size", "0"),
-                }
-            )
-
-        return {
-            "query": query,
-            "results": formatted_results,
-            "total_results": len(formatted_results),
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-    
-# @router.get("/search/ai")
-# async def ai_search(query: str, top_k: int = 10, min_score: float = 0.3):
-#     """AI Search endpoint - semantic search"""
-#     try:
-#         if not drive_client or not drive_client.creds:
-#             raise HTTPException(status_code=401, detail="Not authenticated")
-
-#         if not nlp_engine:
-#             raise HTTPException(status_code=500, detail="NLP engine not initialized")
-
-#         if not nlp_engine.is_trained:
-#             model_path = os.path.join(MODELS_DIR, "nlp_search_model.pkl")
-#             if os.path.exists(model_path):
-#                 nlp_engine.load_model(model_path)
-#             else:
-#                 raise HTTPException(status_code=400, detail="NLP model not trained. Please train first.")
-
-#         results = nlp_engine.search(query, top_k=top_k, min_score=min_score)
-
-#         formatted_results = []
-#         for result in results:
-#             doc = result["document"]
-#             formatted_results.append(
-#                 {
-#                     "id": doc["id"],
-#                     "name": doc["name"],
-#                     "mimeType": doc.get("mimeType", ""),
-#                     "score": result["score"],
-#                     "relevance": result["relevance"],
-#                     "snippet": (doc.get("content", "")[:200] + "...") if doc.get("content") else "",
-#                     "owner": doc.get("owner", "Unknown"),
-#                     "modifiedTime": doc.get("modifiedTime", ""),
-#                     "webViewLink": doc.get("webViewLink", ""),
-#                     "size": doc.get("size", "0"),
-#                 }
-#             )
-
-#         return {
-#             "query": query,
-#             "results": formatted_results,
-#             "total_results": len(formatted_results),
-#         }
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-# =====================Add note HERE====================
-
-@router.post("/notes")
-async def create_note(
-    title: str = Body(...),
-    content: str = Body(""),
-    db: Session = Depends(get_db),
-):
-    """
-    Create a text note as a Google Drive file and store it in documents table.
-    """
-    if not drive_client or not drive_client.creds:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    try:
-        drive_service = drive_client.service
-
-        # 1) Create a Google Doc with the note content
-        file_metadata = {
-            "name": title,
-            "mimeType": "application/vnd.google-apps.document",
-        }
-
-        media = MediaInMemoryUpload(
-            content.encode("utf-8"),
-            mimetype="text/plain",
-            resumable=False,
-        )
-
-        created = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields=(
-                "id, name, mimeType, size, webViewLink, thumbnailLink, "
-                "iconLink, createdTime, modifiedTime, owners, description"
-            ),
-        ).execute()
-
-        drive_file_id = created["id"]
-
-        # 2) Insert into documents using existing ingestion metadata logic
-        ingestion = DriveIngestionService(drive_client, db)
-        metadata = ingestion._extract_metadata(created, account_email=ingestion._current_user_email)
-        new_doc = Document(**metadata)
-        db.add(new_doc)
-        db.commit()
-        db.refresh(new_doc)
-
-        # 3) Optional: tag as note
-        ingestion._create_simple_tags(drive_file_id, created)
-
-        return {
-            "message": "Note created",
-            "document_id": new_doc.id,
-            "drive_file_id": drive_file_id,
-            "title": new_doc.title,
-        }
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 # ==================== SIMPLE SEARCH ROUTES ====================
 

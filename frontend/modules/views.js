@@ -240,7 +240,6 @@ function renderAITags() {
       allTags[tag] = (allTags[tag] || 0) + 1;
     });
   });
-  
   const sortedTags = Object.entries(allTags).sort((a, b) => b[1] - a[1]);
   
   return `
