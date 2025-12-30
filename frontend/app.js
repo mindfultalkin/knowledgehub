@@ -292,23 +292,73 @@ document.head.appendChild(style);
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM loaded, initializing app...');
   
-  // Small delay to ensure all modules are loaded
-  setTimeout(() => {
-    initApp().catch(error => {
-      console.error('Failed to initialize app:', error);
-      const root = document.getElementById('app-root');
-      if (root) {
-        root.innerHTML = `
-            <div style="padding: 2rem; text-align: center; color: red;">
-                <h2>Application Error</h2>
-                <p>${error.message}</p>
-                <p>Please check console for details</p>
-                <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    Reload Page
-                </button>
-            </div>
-        `;
+  let retryCount = 0;
+  const maxRetries = 30;
+  
+  function safeInit() {
+    retryCount++;
+    console.log(`🔄 Safe init attempt ${retryCount}/${maxRetries}`);
+    
+    // ✅ CHECK EVERY DEPENDENCY
+    const checks = {
+      auth: typeof window.checkAuthStatus === 'function',
+      state: window.appState && typeof window.appState.currentView !== 'undefined',
+      root: !!document.getElementById('app-root'),
+      navigateTo: typeof window.navigateTo === 'function'
+    };
+    
+    console.log('Dependencies:', checks);
+    
+    if (!checks.auth || !checks.state || !checks.root || !checks.navigateTo) {
+      if (retryCount < maxRetries) {
+        setTimeout(safeInit, 150);
+        return;
       }
+      showSafeError('Dependencies not ready');
+      return;
+    }
+    
+    // ✅ ALL GOOD - RUN initApp
+    console.log('✅ ALL DEPENDENCIES READY');
+    initAppSafely();
+  }
+  
+  function initAppSafely() {
+    initApp().catch(error => {
+      console.error('❌ App init failed:', error);
+      showSafeError(error.message);
     });
-  }, 100);
+  }
+  
+  function showSafeError(message) {
+    const root = document.getElementById('app-root');
+    if (root) {
+      root.innerHTML = `
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 2rem; text-align: center; background: #f8f9fa;">
+          <div style="max-width: 500px; background: white; padding: 3rem; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <h2 style="color: #dc3545; margin-bottom: 1rem;">🚨 Application Error</h2>
+            <p style="color: #666; line-height: 1.6;">${message || 'Something went wrong'}</p>
+            <p style="color: #666; font-size: 0.9rem; margin-top: 1rem;">Check console (F12) for details</p>
+            <button onclick="location.reload()" style="
+              margin-top: 2rem; 
+              padding: 12px 32px; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white; 
+              border: none; 
+              border-radius: 8px; 
+              font-size: 16px; 
+              font-weight: 600; 
+              cursor: pointer;
+              transition: transform 0.2s;
+            " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+              🔄 Reload Page
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  }
+  
+  // START SAFE INIT
+  safeInit();
 });
