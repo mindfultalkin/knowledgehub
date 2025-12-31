@@ -1,7 +1,7 @@
-// modules/ui.js - UI Rendering Functions
+// modules/ui.js - CLEAN VERSION (No extra buttons)
 console.log('Loading ui.js...');
 
-// File card renderer
+// ORIGINAL File card renderer - NO Edit Metadata or View buttons
 function renderFileCard(file) {
   const icon = `<div style="font-size:3.5rem;">${window.getFileIcon(file.mimeType, file.name)}</div>`;
   const allTags = file.aiTags || [];
@@ -32,8 +32,7 @@ function renderFileCard(file) {
   `;
 }
 
-
-// Attach file card listeners
+// Attach file card listeners (ORIGINAL - opens modal only)
 function attachFileCardListeners() {
   document.querySelectorAll('.file-card').forEach(card => {
     card.addEventListener('click', function() {
@@ -41,10 +40,8 @@ function attachFileCardListeners() {
       const fileName = this.dataset.fileName;
       const fileType = this.dataset.fileType;
       
-      if (fileId) {
-        if (window.openDocumentModal) {
-          window.openDocumentModal(fileId, fileName, fileType);
-        }
+      if (fileId && window.openDocumentModal) {
+        window.openDocumentModal(fileId, fileName, fileType);
       }
     });
   });
@@ -113,7 +110,7 @@ function renderAISearchResult(file) {
   `;
 }
 
-// View file
+// View file (ORIGINAL)
 function viewFile(file) {
   const fileUrl = file.file_url || file.webViewLink || file.fileUrl;
   
@@ -144,7 +141,7 @@ function navigateTo(view) {
   if (window.renderCurrentView) window.renderCurrentView();
 }
 
-// Make functions globally available
+// Make functions globally available (NO metadata functions)
 window.renderFileCard = renderFileCard;
 window.attachFileCardListeners = attachFileCardListeners;
 window.renderSimpleSearchResult = renderSimpleSearchResult;

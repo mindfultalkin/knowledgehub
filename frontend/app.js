@@ -11,16 +11,16 @@ async function initApp() {
     return;
   }
   
-  root.innerHTML = `
-    <header class="app-header">
-      <div class="app-title">
-        🎓 Knowledge Hub
-      </div>
-      <div class="connection-status" id="connectionStatus">
-        <div class="status-dot" style="background: #666;"></div>
-        <span>Checking connection...</span>
-      </div>
-    </header>
+    root.innerHTML = `
+      <header class="app-header">
+        <div class="app-title">
+          <img src="\QL partners logo.jpeg" alt="Company Logo" class="app-logo">🎓 Knowledge Hub
+        </div>
+        <div class="connection-status" id="connectionStatus">
+          <div class="status-dot" style="background: #666;"></div>
+          <span>Checking connection...</span>
+        </div>
+      </header>
     
     <div class="app-container">
       <nav class="sidebar">
@@ -50,10 +50,17 @@ async function initApp() {
             </button>
           </li>
           <li class="nav-item">
-              <button class="nav-link" data-view="clause-library" onclick="window.navigateTo('clause-library')">
-                  <span class="nav-icon">📋</span>
-                  <span>Clauses</span>
-              </button>
+            <button class="nav-link" data-view="clause-library" onclick="window.navigateTo('clause-library')">
+              <span class="nav-icon">📋</span>
+              <span>Clauses</span>
+            </button>
+          </li>
+          <!-- NEW: Template Library -->
+          <li class="nav-item">
+            <button class="nav-link" data-view="templates" onclick="window.navigateTo('templates')">
+              <span class="nav-icon">📄</span>
+              <span>Templates</span>
+            </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="settings" onclick="window.navigateTo('settings')">
@@ -115,6 +122,15 @@ async function initApp() {
   window.renderCurrentView();
 }
 
+// NEW: Template Library View
+window.showTemplatesView = function() {
+  const mainContent = document.querySelector('.main-content');
+  if (mainContent) {
+    mainContent.innerHTML = window.renderTemplates();
+    window.loadTemplates();
+  }
+};
+
 // View wrapper functions
 window.showDashboard = function() {
   const mainContent = document.querySelector('.main-content');
@@ -172,6 +188,9 @@ window.renderCurrentView = function() {
     case 'clause-library':
       window.showClauseLibrary();
       break;
+    case 'templates':  // NEW
+      window.showTemplatesView();
+      break;
     case 'settings':
       window.showSettingsView();
       break;
@@ -207,7 +226,7 @@ searchStyle.textContent = `
 `;
 document.head.appendChild(searchStyle);
 
-// Animations CSS
+// Add animations CSS
 const style = document.createElement('style');
 style.textContent = `
   @keyframes slideIn {
@@ -257,33 +276,6 @@ style.textContent = `
   .theme-button:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
-  }
-  
-  /* Dark theme */
-  [data-theme="dark"] {
-    --bg-primary: #111111ff;
-    --bg-secondary: #080808ff;
-    --bg-tertiary: #0f3460;
-    --text-primary: #eaeaea;
-    --text-secondary: #a0a0a0;
-    --border-color: #2d2d44;
-  }
-  
-  [data-theme="dark"] .app-header {
-    background: linear-gradient(135deg, #080808ff, #000000ff);
-  }
-  
-  [data-theme="dark"] .sidebar {
-    background: #000000ff;
-  }
-  
-  /* Grid sizes */
-  [data-grid-size="small"] .files-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  }
-  
-  [data-grid-size="large"] .files-grid {
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   }
 `;
 document.head.appendChild(style);

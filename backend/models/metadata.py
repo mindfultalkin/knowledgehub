@@ -11,19 +11,20 @@ import enum
 
 from database import Base
 
-
 # ============================================================
 # ENUMS
 # ============================================================
 
 class ContentType(str, enum.Enum):
     TEMPLATE = "template"
+    CLAUSE_SET = "clause_set"          # NEW: For clause library
+    PRACTICE_NOTE = "practice_note"    # NEW: For practice notes/checklists
+    KNOWLEDGE_MATERIAL = "knowledge_material"  # NEW: For research materials
     CLASS = "class"
     RESOURCE = "resource"
     CASE_LAW = "case_law"
     VIDEO = "video"
     OTHER = "other"
-
 
 class ProcessingStatus(str, enum.Enum):
     PENDING = "pending"
@@ -31,13 +32,11 @@ class ProcessingStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
-
 class TaskType(str, enum.Enum):
     EXTRACT_TEXT = "extract_text"
     GENERATE_THUMBNAIL = "generate_thumbnail"
     AI_TAGGING = "ai_tagging"
     CREATE_EMBEDDING = "create_embedding"
-
 
 # ============================================================
 # PRACTICE HIERARCHY MODELS
@@ -59,7 +58,6 @@ class PracticeArea(Base):
     # Relationships
     sub_practice_areas = relationship("SubPracticeArea", back_populates="practice_area", cascade="all, delete-orphan")
 
-
 class SubPracticeArea(Base):
     """
     Sub-practice areas (e.g., Employment Contracts, POSH Policy)
@@ -80,7 +78,6 @@ class SubPracticeArea(Base):
     __table_args__ = (
         Index('idx_practice_area', 'practice_area_id'),
     )
-
 
 # ============================================================
 # DOCUMENT METADATA MODEL
@@ -135,6 +132,14 @@ class Document(Base):
     effective_date = Column(DateTime, nullable=True)
     review_cycle_days = Column(Integer, nullable=True)
     
+    # NEW FIELDS FOR QL PARTNERS REQUIREMENTS
+    # Workflow & Knowledge Hub classification
+    workflow_status = Column(String(50), nullable=True)  # Draft, Approved, Signed, Expired
+    bucket = Column(String(50), nullable=True)           # Research, Knowledge Hub
+    certified_by = Column(String(255), nullable=True)    # Partner who certified template
+    certified_at = Column(DateTime, nullable=True)       # When partner certified
+    variant = Column(String(100), nullable=True)         # Light/Heavy, Pro-employer, etc.
+    
     # Legal metadata
     jurisdiction = Column(String(255), nullable=True)
     
@@ -158,8 +163,11 @@ class Document(Base):
         Index('idx_status', 'status'),
         Index('idx_modified', 'modified_at'),
         Index('idx_sub_practice', 'sub_practice_id'),
+        # NEW INDEXES FOR PERFORMANCE
+        Index('idx_workflow_bucket', 'workflow_status', 'bucket'),
+        Index('idx_content_type', 'content_type'),
+        Index('idx_templates', 'content_type', 'workflow_status', 'bucket'),
     )
-
 
 # ============================================================
 # DOCUMENT CHUNKS (for NLP search)
@@ -185,7 +193,6 @@ class DocumentChunk(Base):
     __table_args__ = (
         Index('idx_document_chunk', 'document_id', 'chunk_index'),
     )
-
 
 # ============================================================
 # TAGS AND TAXONOMY
@@ -215,7 +222,6 @@ class Tag(Base):
         Index('idx_category', 'category'),
     )
 
-
 class DocumentTag(Base):
     """
     Many-to-many relationship between documents and tags
@@ -240,7 +246,6 @@ class DocumentTag(Base):
         Index('idx_tag_confidence', 'tag_id', 'confidence_score'),
     )
 
-
 # ============================================================
 # VECTOR EMBEDDINGS
 # ============================================================
@@ -264,7 +269,6 @@ class VectorEmbedding(Base):
     __table_args__ = (
         Index('idx_document_embedding', 'document_id'),
     )
-
 
 # ============================================================
 # ACCESS CONTROL
@@ -291,7 +295,6 @@ class AccessControl(Base):
         Index('idx_document_principal', 'document_id', 'principal_id'),
         Index('idx_principal', 'principal_id'),
     )
-
 
 # ============================================================
 # PROCESSING QUEUE
@@ -320,7 +323,6 @@ class ProcessingQueue(Base):
         Index('idx_status_priority', 'status', 'priority'),
         Index('idx_document_task', 'document_id', 'task_type'),
     )
-
 
 # ============================================================
 # SYNC CHECKPOINT

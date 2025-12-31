@@ -72,21 +72,13 @@ function renderDashboard() {
           <div class="card mb-lg">
             <h2 class="card-title">☁️ Google Drive Connection</h2>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: center;">
-              <div>
-                <strong>Account:</strong> ${window.appState.driveInfo.user?.email || 'Connected'}
-              </div>
-              <div>
-                <strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span>
-              </div>
-              <div>
-                <strong>Total Files:</strong> ${stats.totalFiles}
-              </div>
+              <div><strong>Account:</strong> ${window.appState.driveInfo.user?.email || 'Connected'}</div>
+              <div><strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span></div>
+              <div><strong>Total Files:</strong> ${stats.totalFiles}</div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button class="action-button" onclick="window.refreshFiles()">🔄 Refresh Drive</button>
                 <button class="action-button" onclick="window.uploadFiles()">📤 Upload Files</button>
-                <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Recording">
-                  🎤 Voice Record
-                </button>
+                <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Recording">🎤 Voice Record</button>
                 <button class="action-button" onclick="window.openNoteModal()">📝 Add Note</button>
               </div>
             </div>
@@ -120,7 +112,6 @@ function renderSearch() {
         </div>
       ` : `
         <div class="search-section">
-          <!-- Search Bar -->
           <div class="search-bar">
             <input 
               type="text" 
@@ -130,10 +121,9 @@ function renderSearch() {
               value="${window.appState.searchQuery}"
               onkeypress="if(event.key === 'Enter') window.performSearch()"
             >
-            <button class="search-button" onclick="window.performSearch()">Search</button>
+            <button class="search-button" onclick="window.performGroupedSearch(window.appState.searchQuery)">Search</button>
           </div>
           
-          <!-- Search Type Selection -->
           <div style="display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap;">
             <button class="search-type-button ${window.appState.searchType === 'simple' ? 'active' : ''}" 
                     onclick="window.setSearchType('simple')">
@@ -149,7 +139,6 @@ function renderSearch() {
             </button>
           </div>
           
-          <!-- Search Description -->
           <div style="margin: 12px 0; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
             <strong>${window.appState.searchType === 'simple' ? '🔍 Exact Match Search:' : '🤖 AI Semantic Search:'}</strong>
             <span style="color: var(--text-secondary);">
@@ -169,34 +158,7 @@ function renderSearch() {
           ` : ''}
         </div>
         
-        <!-- Search Results -->
-        <div style="margin: 24px 0;">
-          <h2 class="view-title">
-            ${window.appState.searchType === 'simple' ? '🔍' : '🤖'} 
-            ${window.appState.searchType === 'simple' ? 'Exact Match' : 'AI Semantic'} 
-            Results for "${window.appState.searchQuery}"
-            ${window.appState.searchResults.length ? `(${window.appState.searchResults.length} found)` : ''}
-          </h2>
-          
-          ${window.appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : 
-            window.appState.searchResults.length > 0 ? `
-              <div class="files-grid">
-                ${window.appState.searchResults.map(file => 
-                  window.appState.searchType === 'simple' 
-                    ? window.renderSimpleSearchResult(file) 
-                    : window.renderAISearchResult(file)
-                ).join('')}
-              </div>
-            ` : window.appState.searchQuery ? `
-              <div class="empty-state">
-                <div class="empty-state-icon">${window.appState.searchType === 'simple' ? '🔍' : '🤖'}</div>
-                <h3>No documents found</h3>
-                <p>${window.appState.searchType === 'simple' 
-                  ? `No documents contain all the words: "${window.appState.searchQuery}"` 
-                  : 'Try different search terms or train the AI model'}</p>
-              </div>
-            ` : ''}
-        </div>
+        <div id="searchResults"></div>
       `}
     </div>
   `;
@@ -231,6 +193,111 @@ function renderFiles() {
     </div>
   `;
 }
+
+// NEW: Template Library View
+function renderTemplates() {
+  return `
+    <div class="view-container">
+      <div class="view-header">
+        <h1 class="view-title">📄 Template Library</h1>
+        <p class="view-subtitle">Filter by Practice Area, Tags, or Search</p>
+      </div>
+      
+      ${!window.appState.authenticated ? `
+        <div class="auth-container">
+          <button class="connect-button" onclick="window.navigateTo('dashboard')">Connect Drive</button>
+        </div>
+      ` : `
+        <div class="card mb-lg" style="padding: 20px;">
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
+            <div style="flex: 1; min-width: 250px;">
+              <label style="display: block; margin-bottom: 4px; font-weight: 600;">Search</label>
+              <input type="text" id="templateSearch" placeholder="employment, NDA, service agreement..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
+            </div>
+            
+            <div style="min-width: 220px;">
+              <label style="display: block; margin-bottom: 4px; font-weight: 600;">Practice Area</label>
+              <select id="practiceAreaFilter" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
+                <option value="">Loading practice areas...</option>
+              </select>
+            </div>
+            
+            <button class="action-button" onclick="window.loadTemplates()" style="white-space: nowrap;">
+              🔄 Refresh
+            </button>
+          </div>
+        </div>
+        
+        <div class="stats-row" style="margin-bottom: 20px;">
+          <span id="templateCount" style="font-weight: 600; color: var(--primary-color);">Loading...</span>
+          <span style="color: var(--text-secondary);">files found</span>
+        </div>
+        
+        <div id="templatesGrid" class="files-grid">
+          <div class="empty-state">
+            <div style="font-size: 4rem;">📄</div>
+            <h3>Loading templates...</h3>
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+window.loadTemplates = async function() {
+  try {
+    const params = new URLSearchParams();
+    const search = document.getElementById('templateSearch')?.value;
+    const practiceArea = document.getElementById('practiceAreaFilter')?.value;
+    
+    if (search) params.set('search', search);
+    if (practiceArea) params.set('practice_area', practiceArea);
+    
+    const response = await fetch(`${window.API_BASE_URL}/templates?${params}`);
+    const data = await response.json();
+    
+    const grid = document.getElementById('templatesGrid');
+    const countEl = document.getElementById('templateCount');
+    const practiceSelect = document.getElementById('practiceAreaFilter');
+    
+    if (grid && data.templates) {
+      if (data.templates.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <div style="font-size: 4rem;">📄</div>
+            <h3>No templates match your filters</h3>
+            <p>Try "employment", "HR", "service agreement", "NDA"</p>
+          </div>
+        `;
+      } else {
+        // ✅ Use renderFileCard for perfect file display
+        grid.innerHTML = data.templates.map(file => window.renderFileCard(file)).join('');
+        window.attachFileCardListeners();
+        
+        // Update count
+        if (countEl) countEl.textContent = data.total || data.templates.length;
+      }
+      
+      // ✅ Populate practice area dropdown
+      if (practiceSelect && data.practice_areas) {
+        practiceSelect.innerHTML = `
+          <option value="">All Practice Areas (${data.practice_areas.length})</option>
+          ${data.practice_areas.map(area => `<option value="${area}">${area}</option>`).join('')}
+        `;
+      }
+    }
+  } catch (error) {
+    console.error('Templates load error:', error);
+    document.getElementById('templatesGrid').innerHTML = `
+      <div class="empty-state">
+        <div style="font-size: 4rem; color: #f44336;">⚠️</div>
+        <h3>Connection error</h3>
+        <p>Check backend is running on port 8000</p>
+      </div>
+    `;
+  }
+};
+
 
 // Render AI tags view
 function renderAITags() {
@@ -305,16 +372,10 @@ function renderSettings() {
         <h2 class="card-title">Google Drive Connection</h2>
         ${window.appState.authenticated ? `
           <div style="display: grid; gap: 16px;">
-            <div>
-              <strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span>
-            </div>
+            <div><strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span></div>
             ${window.appState.driveInfo?.user ? `
-              <div>
-                <strong>Account:</strong> ${window.appState.driveInfo.user.email}
-              </div>
-              <div>
-                <strong>Display Name:</strong> ${window.appState.driveInfo.user.displayName || 'Not available'}
-              </div>
+              <div><strong>Account:</strong> ${window.appState.driveInfo.user.email}</div>
+              <div><strong>Display Name:</strong> ${window.appState.driveInfo.user.displayName || 'Not available'}</div>
             ` : ''}
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
               <button class="search-button" onclick="window.initiateGoogleAuth()" style="width: fit-content;">
@@ -398,9 +459,67 @@ function renderSettings() {
   `;
 }
 
+// NEW: Template Functions
+window.loadTemplates = async function() {
+  try {
+    const params = new URLSearchParams();
+    const search = document.getElementById('templateSearch')?.value;
+    const practiceArea = document.getElementById('practiceAreaFilter')?.value;
+    const subPractice = document.getElementById('subPracticeFilter')?.value;
+    
+    if (search) params.set('search', search);
+    if (practiceArea) params.set('practice_area', practiceArea);
+    if (subPractice) params.set('sub_practice', subPractice);
+    
+    const response = await fetch(`${window.API_BASE_URL}/templates?${params}`);
+    const data = await response.json();
+    
+    const grid = document.getElementById('templatesGrid');
+    if (grid && data.templates) {
+      if (data.templates.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <div style="font-size: 4rem;">📄</div>
+            <h3>No templates match your filters</h3>
+            <p>Try "employment", "HR policy", "service agreement"</p>
+          </div>
+        `;
+      } else {
+        grid.innerHTML = data.templates.map(file => window.renderFileCard(file)).join('');
+        window.attachFileCardListeners();
+        
+        // Populate practice area dropdown
+        if (data.practice_areas) {
+          const select = document.getElementById('practiceAreaFilter');
+          if (select) {
+            select.innerHTML = '<option value="">All Practice Areas</option>' + 
+              data.practice_areas.map(area => `<option value="${area}">${area}</option>`).join('');
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Templates error:', error);
+    document.getElementById('templatesGrid').innerHTML = `
+      <div class="empty-state">
+        <div style="font-size: 4rem; color: #f44336;">⚠️</div>
+        <h3>Backend error</h3>
+      </div>
+    `;
+  }
+};
+// Auto-load on filter change
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'practiceAreaFilter' || e.target.id === 'subPracticeFilter' || e.target.id === 'templateSearch') {
+    window.loadTemplates();
+  }
+});
+
+
 // Make functions globally available
 window.renderDashboard = renderDashboard;
 window.renderSearch = renderSearch;
 window.renderFiles = renderFiles;
 window.renderAITags = renderAITags;
 window.renderSettings = renderSettings;
+window.renderTemplates = renderTemplates;

@@ -1652,3 +1652,165 @@ body {
   width: 100%;
   padding: 16px;
 }
+
+/* Responsive Logo Styles */
+.app-logo {
+  height: auto;
+  max-width: 100%;
+  display: inline-block;
+  vertical-align: middle;
+  object-fit: contain;
+  
+  /* Mobile-first approach */
+  width: 35px;
+  height: 35px;
+  margin-right: 8px;
+}
+
+/* Small tablets and large phones */
+@media (min-width: 480px) {
+  .app-logo {
+    width: 40px;
+    height: 40px;
+    margin-right: 10px;
+  }
+}
+
+/* Tablets */
+@media (min-width: 768px) {
+  .app-logo {
+    width: 50px;
+    height: 50px;
+    margin-right: 12px;
+  }
+}
+
+/* Desktops */
+@media (min-width: 1024px) {
+  .app-logo {
+    width: 55px;
+    height: 55px;
+    margin-right: 14px;
+  }
+}
+
+/* Large desktops */
+@media (min-width: 1200px) {
+  .app-logo {
+    width: 60px;
+    height: 60px;
+    margin-right: 16px;
+  }
+}
+
+/* Extra large screens */
+@media (min-width: 1600px) {
+  .app-logo {
+    width: 65px;
+    height: 65px;
+    margin-right: 18px;
+  }
+}
+
+/* Dark theme - Add these to your existing dark theme styles */
+[data-theme="dark"] {
+  --bg-primary: #111111ff;
+  --bg-secondary: #080808ff;
+  --bg-tertiary: #0f3460;
+  --text-primary: #eaeaea;
+  --text-secondary: #a0a0a0;
+  --border-color: #2d2d44;
+}
+
+[data-theme="dark"] .app-header {
+  background: linear-gradient(135deg, #080808ff, #000000ff);
+}
+
+[data-theme="dark"] .sidebar {
+  background: #000000ff;
+}
+
+/* Grid sizes - Add these to your existing grid styles */
+[data-grid-size="small"] .files-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+[data-grid-size="large"] .files-grid {
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+}
+
+/* Search type buttons - Add these to your existing button styles */
+.search-type-button {
+  padding: 10px 20px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.search-type-button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-dark);
+}
+
+.search-type-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Animations */
+@keyframes slideIn {
+  from { transform: translateX(400px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(400px); opacity: 0; }
+}
+
+/* Action button styles - Add to existing button styles */
+.action-button {
+  padding: 8px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-button:hover {
+  background: var(--primary-dark);
+  transform: translateY(-2px);
+}
+
+/* Theme button styles - Add to existing button styles */
+.theme-button {
+  flex: 1;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+
+.theme-button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-dark);
+}
+
+.theme-button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}

@@ -7,6 +7,8 @@ import json
 from models.metadata import DocumentTag
 from models.metadata import DocumentChunk, VectorEmbedding
 from models.metadata import Document, DocumentTag, Tag
+from models.metadata import PracticeArea, SubPracticeArea  # ADD THIS
+
 
 
 # Import config FIRST
@@ -1414,6 +1416,170 @@ async def find_similar_clauses(
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ============================================================
+# QL PARTNERS TEMPLATE LIBRARY & GROUPED SEARCH
+# ============================================================
+
+@router.get("/documents/{doc_id}/metadata")
+async def get_document_metadata(doc_id: str, db: Session = Depends(get_db)):
+    """Get document metadata for Template Library editing"""
+    doc = get_document_by_any_id(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Get sub-practice details
+    sub_practice = db.query(SubPracticeArea).filter(SubPracticeArea.sub_practice_id == doc.sub_practice_id).first()
+    practice_area = db.query(PracticeArea).filter(PracticeArea.practice_area_id == sub_practice.practice_area_id).first() if sub_practice else None
+    
+    return {
+        "id": doc.id,
+        "title": doc.title,
+        "content_type": doc.content_type.value if doc.content_type else None,
+        "sub_practice_id": doc.sub_practice_id,
+        "sub_practice_name": sub_practice.sub_practice_name if sub_practice else None,
+        "practice_area_name": practice_area.practice_area_name if practice_area else None,
+        "workflow_status": doc.workflow_status,
+        "bucket": doc.bucket,
+        "variant": doc.variant,
+        "certified_by": doc.certified_by,
+        "certified_at": doc.certified_at.isoformat() if doc.certified_at else None,
+        "version_number": doc.version_number
+    }
+
+@router.put("/documents/{doc_id}/metadata")
+async def update_document_metadata(doc_id: str, metadata: dict, db: Session = Depends(get_db)):
+    """Update document metadata for Template Library"""
+    doc = get_document_by_any_id(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Update allowed fields only
+    update_fields = {
+        'content_type': metadata.get('content_type'),
+        'sub_practice_id': metadata.get('sub_practice_id'),
+        'workflow_status': metadata.get('workflow_status'),
+        'bucket': metadata.get('bucket'),
+        'variant': metadata.get('variant'),
+        'certified_by': metadata.get('certified_by'),
+        'certified_at': metadata.get('certified_at'),
+        'version_number': metadata.get('version_number')
+    }
+    
+    for field, value in update_fields.items():
+        if value is not None:
+            setattr(doc, field, value)
+    
+    db.commit()
+    db.refresh(doc)
+    return {"status": "success", "message": "Metadata updated successfully"}
+
+@router.get("/search/grouped")
+async def grouped_search(query: str, content_type: str = None, db: Session = Depends(get_db)):
+    """Grouped search: Templates, Clauses, Practice Notes, Knowledge Materials"""
+    current_user = get_current_user_email()
+    
+    results = {
+        "templates": [],
+        "clause_sets": [],
+        "practice_notes": [],
+        "knowledge_materials": [],
+        "total": 0
+    }
+    
+    # Search documents by content type
+    content_types = []
+    if content_type == "templates":
+        content_types = ["template"]
+    elif content_type == "clauses":
+        content_types = ["clause_set"]
+    elif content_type == "notes":
+        content_types = ["practice_note"]
+    elif content_type == "materials":
+        content_types = ["knowledge_material"]
+    else:
+        content_types = ["template", "clause_set", "practice_note", "knowledge_material"]
+    
+    documents = db.query(Document).filter(
+        Document.account_email == current_user,
+        Document.title.ilike(f"%{query}%"),
+        Document.content_type.in_(content_types)
+    ).limit(10).all()
+    
+    # Group results
+    for doc in documents:
+        if doc.content_type == "template":
+            results["templates"].append({
+                "id": doc.id,
+                "title": doc.title,
+                "practice_area": doc.sub_practice_area.practice_area.practice_area_name if doc.sub_practice_area and doc.sub_practice_area.practice_area else "Uncategorized",
+                "sub_practice": doc.sub_practice_area.sub_practice_name if doc.sub_practice_area else "Uncategorized",
+                "variant": doc.variant,
+                "workflow_status": doc.workflow_status,
+                "file_url": doc.file_url
+            })
+        elif doc.content_type == "clause_set":
+            results["clause_sets"].append({"id": doc.id, "title": doc.title, "file_url": doc.file_url})
+        elif doc.content_type == "practice_note":
+            results["practice_notes"].append({"id": doc.id, "title": doc.title, "file_url": doc.file_url})
+        elif doc.content_type == "knowledge_material":
+            results["knowledge_materials"].append({"id": doc.id, "title": doc.title, "file_url": doc.file_url})
+    
+    results["total"] = len(documents)
+    return results
+
+@router.get("/templates")
+async def list_templates(
+    practice_area: str = None, 
+    search: str = None,
+    db: Session = Depends(get_db)
+):
+    """Template Library - ALL FILES WITH TAGS (40+ files!)"""
+    
+    # ✅ ALL documents WITH TAGS (no MIME restrictions)
+    query = db.query(Document).join(DocumentTag).distinct(Document.id)
+    
+    # Filters only
+    if search:
+        query = query.filter(Document.title.ilike(f"%{search}%"))
+    if practice_area:
+        query = query.join(Tag).filter(Tag.name.ilike(f"%{practice_area}%"))
+    
+    docs = query.order_by(Document.modified_at.desc()).limit(100).all()
+    
+    # Tags for dropdown
+    practice_options = db.query(Tag.name.distinct()).all()
+    practice_options = [tag[0] for tag in practice_options]
+    
+    templates = []
+    for doc in docs:
+        doc_tags = db.query(Tag.name).join(DocumentTag).filter(
+            DocumentTag.document_id == doc.id
+        ).all()
+        tag_names = [tag[0] for tag in doc_tags]
+        
+        templates.append({
+            "id": doc.id,
+            "name": doc.title,
+            "title": doc.title,
+            "owner": doc.owner_name or "Unknown",
+            "modifiedTime": doc.modified_at.isoformat() if doc.modified_at else None,
+            "size": doc.size_bytes or 0,
+            "mimeType": doc.mime_type or "",
+            "aiTags": tag_names,
+            "tagCount": len(tag_names),
+            "file_url": doc.file_url,
+            "type": "document"
+        })
+    
+    print(f"📄 Templates: {len(templates)} TAGGED FILES TOTAL")
+    return {
+        "templates": templates,
+        "practice_areas": sorted(set(practice_options)),
+        "total": len(templates)
+    }
 
 
 
