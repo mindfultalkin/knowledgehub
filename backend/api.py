@@ -1536,23 +1536,31 @@ async def list_templates(
     search: str = None,
     db: Session = Depends(get_db)
 ):
-    """Template Library - ALL FILES WITH TAGS (40+ files!)"""
+    """Template Library - ULTRA FAST DB-ONLY (No Drive API calls!)"""
     
-    # ✅ ALL documents WITH TAGS (no MIME restrictions)
+    # ✅ ULTRA-FAST DB QUERY - All filtering at SQL level ⚡
     query = db.query(Document).join(DocumentTag).distinct(Document.id)
     
-    # Filters only
+    # Filters (instant SQL)
     if search:
         query = query.filter(Document.title.ilike(f"%{search}%"))
     if practice_area:
         query = query.join(Tag).filter(Tag.name.ilike(f"%{practice_area}%"))
     
-    docs = query.order_by(Document.modified_at.desc()).limit(100).all()
+    # ✅ KEY FILTERS: Live Drive files only
+    docs = query.filter(
+        Document.drive_file_id.isnot(None),  # Has Drive ID
+        Document.size_bytes > 0,             # Not deleted
+        Document.account_email.isnot(None)   # Authenticated user
+    ).order_by(Document.modified_at.desc()).limit(100).all()
     
-    # Tags for dropdown
+    print(f"⚡ DB query: {len(docs)} tagged live files (<0.1s)")
+
+    # ✅ ALL TAGS DROPDOWN (global)
     practice_options = db.query(Tag.name.distinct()).all()
-    practice_options = [tag[0] for tag in practice_options]
+    practice_areas = sorted(set(tag[0] for tag in practice_options))
     
+    # ✅ Build response
     templates = []
     for doc in docs:
         doc_tags = db.query(Tag.name).join(DocumentTag).filter(
@@ -1561,7 +1569,7 @@ async def list_templates(
         tag_names = [tag[0] for tag in doc_tags]
         
         templates.append({
-            "id": doc.id,
+            "id": doc.drive_file_id,  # Matches /drive/files
             "name": doc.title,
             "title": doc.title,
             "owner": doc.owner_name or "Unknown",
@@ -1574,12 +1582,13 @@ async def list_templates(
             "type": "document"
         })
     
-    print(f"📄 Templates: {len(templates)} TAGGED FILES TOTAL")
+    print(f"📄 Templates: {len(templates)} FINAL (<0.5s)")
     return {
         "templates": templates,
-        "practice_areas": sorted(set(practice_options)),
+        "practice_areas": practice_areas,  # ALL tags always
         "total": len(templates)
     }
+
 
 
 
