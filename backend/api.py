@@ -1530,64 +1530,110 @@ async def grouped_search(query: str, content_type: str = None, db: Session = Dep
     results["total"] = len(documents)
     return results
 
+@router.post("/templates/cleanup-prod")
+async def cleanup_prod(db: Session = Depends(get_db)):
+    """🧹 Railway: Delete deleted Drive files"""
+    # Find orphans: tags but no valid Drive data
+    orphans = db.query(Document).filter(
+        Document.drive_file_id.is_(None),
+        Document.size_bytes <= 0,
+        Document.file_url.is_(None)
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"cleaned": orphans}
+
+
 @router.get("/templates")
 async def list_templates(
     practice_area: str = None, 
     search: str = None,
     db: Session = Depends(get_db)
 ):
-    """Template Library - ULTRA FAST DB-ONLY (No Drive API calls!)"""
+    """Works Local + Railway: Drive verification + DB fallback"""
     
-    # ✅ ULTRA-FAST DB QUERY - All filtering at SQL level ⚡
-    query = db.query(Document).join(DocumentTag).distinct(Document.id)
-    
-    # Filters (instant SQL)
-    if search:
-        query = query.filter(Document.title.ilike(f"%{search}%"))
-    if practice_area:
-        query = query.join(Tag).filter(Tag.name.ilike(f"%{practice_area}%"))
-    
-    # ✅ KEY FILTERS: Live Drive files only
-    docs = query.filter(
-        Document.drive_file_id.isnot(None),  # Has Drive ID
-        Document.size_bytes > 0,             # Not deleted
-        Document.account_email.isnot(None)   # Authenticated user
-    ).order_by(Document.modified_at.desc()).limit(100).all()
-    
-    print(f"⚡ DB query: {len(docs)} tagged live files (<0.1s)")
-
-    # ✅ ALL TAGS DROPDOWN (global)
-    practice_options = db.query(Tag.name.distinct()).all()
-    practice_areas = sorted(set(tag[0] for tag in practice_options))
-    
-    # ✅ Build response
     templates = []
-    for doc in docs:
-        doc_tags = db.query(Tag.name).join(DocumentTag).filter(
-            DocumentTag.document_id == doc.id
-        ).all()
-        tag_names = [tag[0] for tag in doc_tags]
-        
-        templates.append({
-            "id": doc.drive_file_id,  # Matches /drive/files
-            "name": doc.title,
-            "title": doc.title,
-            "owner": doc.owner_name or "Unknown",
-            "modifiedTime": doc.modified_at.isoformat() if doc.modified_at else None,
-            "size": doc.size_bytes or 0,
-            "mimeType": doc.mime_type or "",
-            "aiTags": tag_names,
-            "tagCount": len(tag_names),
-            "file_url": doc.file_url,
-            "type": "document"
-        })
     
-    print(f"📄 Templates: {len(templates)} FINAL (<0.5s)")
+    try:
+        # ✅ TRY DRIVE API FIRST (live files only)
+        if drive_client and drive_client.creds:
+            results = drive_client.list_files(100, None, None)
+            drive_files = results.get("files", [])
+            
+            for file in drive_files:
+                doc = db.query(Document).filter(
+                    Document.drive_file_id == file["id"]
+                ).first()
+                
+                if doc:
+                    doc_tags = db.query(Tag.name).join(DocumentTag).filter(
+                        DocumentTag.document_id == doc.id
+                    ).all()
+                    
+                    if doc_tags:  # Tags only
+                        ai_tags = [tag[0] for tag in doc_tags]
+                        
+                        if (not search or search.lower() in file["name"].lower()) and \
+                           (not practice_area or any(practice_area.lower() in tag.lower() for tag in ai_tags)):
+                            templates.append({
+                                "id": file["id"],
+                                "name": file["name"],
+                                "title": file["name"],
+                                "owner": file.get("owners", [{}])[0].get("displayName", "Unknown"),
+                                "modifiedTime": file.get("modifiedTime"),
+                                "size": file.get("size", 0),
+                                "mimeType": file.get("mimeType"),
+                                "aiTags": ai_tags,
+                                "tagCount": len(ai_tags),
+                                "file_url": file.get("webViewLink"),
+                                "type": "document"
+                            })
+            print(f"Drive API: {len(templates)} files")
+            
+    except Exception as e:
+        print(f"Drive API failed: {e} - using DB fallback")
+    
+    # ✅ DB FALLBACK (Railway-safe)
+    if len(templates) == 0:
+        query = db.query(Document).join(DocumentTag).distinct()
+        docs = query.filter(
+            Document.file_url.isnot(None),
+            Document.size_bytes > 5000,
+            ~Document.title.ilike('%deleted%'),
+            ~Document.title.ilike('%temp%')
+        ).limit(50).all()
+        
+        for doc in docs:
+            doc_tags = db.query(Tag.name).join(DocumentTag).filter(
+                DocumentTag.document_id == doc.id
+            ).all()
+            
+            templates.append({
+                "id": str(doc.id),
+                "name": doc.title,
+                "title": doc.title,
+                "owner": doc.owner_name or "Unknown",
+                "modifiedTime": doc.modified_at.isoformat() if doc.modified_at else None,
+                "size": doc.size_bytes or 0,
+                "mimeType": doc.mime_type or "",
+                "aiTags": [tag[0] for tag in doc_tags],
+                "tagCount": len(doc_tags),
+                "file_url": doc.file_url,
+                "type": "document"
+            })
+        print(f"DB fallback: {len(templates)} files")
+    
+    # All tags
+    practice_areas = sorted(set(tag[0] for tag in db.query(Tag.name.distinct()).all()))
+    
+    print(f"Templates FINAL: {len(templates)}")
     return {
         "templates": templates,
-        "practice_areas": practice_areas,  # ALL tags always
+        "practice_areas": practice_areas,
         "total": len(templates)
     }
+
+
+
 
 # ==================== HELPER FUNCTION ====================
 
