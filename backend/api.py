@@ -1589,11 +1589,6 @@ async def list_templates(
         "total": len(templates)
     }
 
-
-
-
-
-
 # ==================== HELPER FUNCTION ====================
 
 def format_file_size(bytes_size):
