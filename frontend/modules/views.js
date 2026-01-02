@@ -165,6 +165,7 @@ function renderSearch() {
 }
 
 // Render files view
+// Render files view - WITH LIST/GRID TOGGLE
 function renderFiles() {
   return `
     <div class="view-container">
@@ -179,9 +180,50 @@ function renderFiles() {
           <button class="connect-button" onclick="window.navigateTo('dashboard')">Go to Dashboard</button>
         </div>
       ` : window.appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : `
-        <div class="files-grid">
-          ${window.appState.files.slice(0, window.appState.filesPerPage).map(file => window.renderFileCard(file)).join('')}
+        <!-- VIEW TOGGLE BUTTONS -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <span id="filesCount" style="font-weight: 600; color: var(--primary-color);">
+              ${window.appState.files.length} files
+            </span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="action-button ${window.appState.filesView === 'grid' ? 'active-view-btn' : ''}" 
+                    onclick="window.toggleFilesView('grid')" title="Grid View">
+              🗂️ Grid
+            </button>
+            <button class="action-button ${window.appState.filesView === 'list' ? 'active-view-btn' : ''}" 
+                    onclick="window.toggleFilesView('list')" title="List View">
+              📋 List
+            </button>
+            <button class="action-button" onclick="window.refreshFiles()" style="background: var(--accent-color);">
+              🔄 Refresh
+            </button>
+          </div>
         </div>
+
+        <!-- GRID VIEW (DEFAULT) -->
+        ${window.appState.filesView !== 'list' ? `
+          <div class="files-grid" id="filesGrid">
+            ${window.appState.files.slice(0, window.appState.filesPerPage).map(file => window.renderFileCard(file)).join('')}
+          </div>
+        ` : ''}
+
+        <!-- LIST VIEW -->
+        ${window.appState.filesView === 'list' ? `
+          <div class="files-list-container" id="filesList">
+            <div class="files-list-header">
+              <span style="flex: 3; font-weight: 600;">📄 File Name</span>
+              <span style="flex: 1; font-weight: 600; text-align: center;">🏷️ Tags</span>
+              <span style="flex: 1; font-weight: 600; text-align: center;">📅 Modified</span>
+              <span style="flex: 1; font-weight: 600; text-align: right;">💾 Size</span>
+            </div>
+            <div class="files-list-body">
+              ${window.appState.files.slice(0, window.appState.filesPerPage).map(file => window.renderFileListRow(file)).join('')}
+            </div>
+          </div>
+        ` : ''}
+
         ${window.appState.files.length > window.appState.filesPerPage ? `
           <div style="text-align: center; margin-top: 24px;">
             <p style="color: var(--text-secondary);">
@@ -193,6 +235,39 @@ function renderFiles() {
     </div>
   `;
 }
+// NEW: List row renderer
+function renderFileListRow(file) {
+  const allTags = file.aiTags || [];
+  const tagPreview = allTags.slice(0, 2).join(', ') + (allTags.length > 2 ? '...' : '');
+  
+  return `
+    <div class="file-list-row" data-file-id="${file.id}">
+      <div class="file-list-cell name-cell" style="flex: 3;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 1.5rem;">${window.getFileIcon(file.mimeType, file.name)}</div>
+          <div>
+            <div style="font-weight: 600; margin-bottom: 2px;">${file.name}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">${file.owner}</div>
+          </div>
+        </div>
+      </div>
+      <div class="file-list-cell tags-cell" style="flex: 1; text-align: center;">
+        ${allTags.length ? 
+          allTags.slice(0, 3).map(tag => `<span class="tag" style="font-size: 0.75rem;">${tag}</span>`).join(' ') +
+          (allTags.length > 3 ? `<span>+${allTags.length-3}</span>` : '')
+          : 'No tags'
+        }
+      </div>
+      <div class="file-list-cell date-cell" style="flex: 1; text-align: center;">
+        ${window.formatDate(file.modifiedTime)}
+      </div>
+      <div class="file-list-cell size-cell" style="flex: 1; text-align: right;">
+        ${window.formatFileSize(file.size)}
+      </div>
+    </div>
+  `;
+}
+
 
 // NEW: Template Library View
 function renderTemplates() {

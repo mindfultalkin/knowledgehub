@@ -257,60 +257,92 @@ async function viewClauseFiles(clauseId, event) {
 }
 
 // Show clause files modal
+// 🔥 PREMIUM "Files with this Clause" Modal
 function showClauseFilesModal(data) {
   const modal = document.createElement('div');
   modal.className = 'modal';
   modal.style.display = 'flex';
   modal.id = 'clauseFilesModal';
   
-  const filesHtml = data.files && data.files.length > 0 ? data.files.map(file => `
-      <div class="clause-file-item-info">
-          <div class="file-icon">📄</div>
+  const filesHtml = data.files && data.files.length > 0 ? 
+    data.files.map(file => {
+      const matchType = file.match_type || 'similar';
+      const badgeClass = matchType === 'exact' ? 'exact' : 'similar';
+      const icon = window.getFileIcon ? window.getFileIcon(file.mimeType, file.title) : '📄';
+      
+      return `
+        <div class="clause-file-item" onclick="window.viewFile('${file.id}')" title="Open ${file.title}">
+          <div class="file-icon">${icon}</div>
           <div class="file-details">
-              <div class="file-title">${window.escapeHtml(file.title)}</div>
-              <div class="file-meta-small">
-                  Modified: ${window.formatDate(file.modified_at)}
-              </div>
+            <div class="file-title">${window.escapeHtml(file.title)}</div>
+            <div class="file-meta-small">
+              <span>📅 ${window.formatDate(file.modified_at)}</span>
+              <span style="color: var(--text-secondary);">👤 ${file.owner || 'Unknown'}</span>
+            </div>
           </div>
-          <span class="match-type-badge ${file.match_type || 'similar'}">${file.match_type || 'Similar'}</span>
+          <span class="match-badge ${badgeClass}">${matchType.toUpperCase()}</span>
+          <button class="btn-open-file">
+            <i class="fas fa-external-link-alt"></i> Open
+          </button>
+        </div>
+      `;
+    }).join('') : `
+      <div class="empty-state" style="text-align: center; padding: 3rem;">
+        <i class="fas fa-inbox" style="font-size: 4rem; color: var(--border-color);"></i>
+        <h3 style="color: var(--text-primary);">No files found</h3>
+        <p style="color: var(--text-secondary);">No documents contain this clause</p>
       </div>
-  `).join('') : `
-      <div class="empty-state">
-          <p>No files found with this clause</p>
-      </div>
-  `;
+    `;
   
   modal.innerHTML = `
-      <div class="modal-overlay" onclick="window.closeClauseFilesModal()"></div>
-      <div class="modal-content" style="max-width: 800px;">
-          <div class="modal-header">
-              <div>
-                  <h2>📋 ${window.escapeHtml(data.clause_title)}</h2>
-                  <p class="modal-subtitle">${data.files ? data.files.length : 0} file(s) contain this clause</p>
-              </div>
-              <button class="close-btn" onclick="window.closeClauseFilesModal()">×</button>
-          </div>
-          
-          <div class="modal-body" style="padding: 2rem; max-height: 60vh; overflow-y: auto;">
-              <div class="clause-content-preview" style="margin-bottom: 2rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
-                  <strong>Clause Content:</strong>
-                  <p style="margin-top: 0.5rem; color: var(--text-secondary);">${window.escapeHtml(data.clause_content || 'No content available').substring(0, 300)}...</p>
-              </div>
-              
-              <h3 style="margin-bottom: 1rem; color: var(--primary-color);">Files containing this clause:</h3>
-              <div class="clause-files-list-info">
-                  ${filesHtml}
-              </div>
-          </div>
-          
-          <div class="modal-footer">
-              <button onclick="window.closeClauseFilesModal()" class="btn-primary">Close</button>
-          </div>
+    <div class="modal-overlay" onclick="this.parentNode.remove()"></div>
+    <div class="modal-content" style="max-width: 900px; max-height: 85vh;">
+      <div class="modal-header">
+        <div>
+          <h2 style="margin: 0;">📋 ${window.escapeHtml(data.clause_title || 'Clause Files')}</h2>
+          <p class="modal-subtitle" style="margin: 4px 0 0 0;">
+            ${data.files ? data.files.length : 0} file(s) contain this clause
+          </p>
+        </div>
+        <button class="close-btn" onclick="this.closest('.modal').remove()" title="Close">
+          <i class="fas fa-times"></i>
+        </button>
       </div>
+      
+      <div class="modal-body" style="padding: 2rem;">
+        <!-- Clause Preview -->
+        ${data.clause_content ? `
+          <div class="clause-content-preview" style="margin-bottom: 2rem; padding: 1.5rem; background: var(--bg-tertiary); border-radius: 12px; border-left: 4px solid var(--primary-color);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+              <i class="fas fa-quote-left" style="color: var(--primary-color); font-size: 1.5rem;"></i>
+              <strong style="color: var(--primary-color);">Clause Preview:</strong>
+            </div>
+            <div style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem; max-height: 120px; overflow: hidden;">
+              ${window.escapeHtml(data.clause_content).substring(0, 400)}${data.clause_content.length > 400 ? '...' : ''}
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- Files List -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <h3 style="margin: 0 0 1rem 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-file-contract"></i> Files Containing This Clause
+          </h3>
+          <div class="clause-files-list">${filesHtml}</div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button onclick="this.closest('.modal').remove()" class="btn-primary" style="min-width: 140px;">
+          <i class="fas fa-times"></i> Close
+        </button>
+      </div>
+    </div>
   `;
   
   document.body.appendChild(modal);
 }
+
 
 // Close clause files modal
 function closeClauseFilesModal() {

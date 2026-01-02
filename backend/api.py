@@ -1549,35 +1549,37 @@ async def list_templates(
     search: str = None,
     db: Session = Depends(get_db)
 ):
-    """Works Local + Railway: Drive verification + DB fallback"""
+    """Fast + Live Drive files + Tags (Local + Prod)"""
     
     templates = []
     
+    # ✅ PRIMARY: Live Drive files + tags (0 deleted)
     try:
-        # ✅ TRY DRIVE API FIRST (live files only)
-        if drive_client and drive_client.creds:
-            results = drive_client.list_files(100, None, None)
-            drive_files = results.get("files", [])
+        if 'drive_client' in globals() and drive_client and drive_client.creds:
+            results = drive_client.list_files(200, None, None)
+            drive_files = results.get('files', [])
             
             for file in drive_files:
+                # Fast tag lookup
                 doc = db.query(Document).filter(
-                    Document.drive_file_id == file["id"]
+                    Document.drive_file_id == file['id']
                 ).first()
                 
                 if doc:
-                    doc_tags = db.query(Tag.name).join(DocumentTag).filter(
+                    doc_tags = db.query(Tag.name).filter(
                         DocumentTag.document_id == doc.id
-                    ).all()
+                    ).join(DocumentTag).distinct().limit(10).all()
                     
-                    if doc_tags:  # Tags only
+                    if doc_tags:
                         ai_tags = [tag[0] for tag in doc_tags]
                         
-                        if (not search or search.lower() in file["name"].lower()) and \
+                        # Fast Python filter (small list)
+                        if (not search or search.lower() in file['name'].lower()) and \
                            (not practice_area or any(practice_area.lower() in tag.lower() for tag in ai_tags)):
                             templates.append({
-                                "id": file["id"],
-                                "name": file["name"],
-                                "title": file["name"],
+                                "id": file['id'],
+                                "name": file['name'],
+                                "title": file['name'],
                                 "owner": file.get("owners", [{}])[0].get("displayName", "Unknown"),
                                 "modifiedTime": file.get("modifiedTime"),
                                 "size": file.get("size", 0),
@@ -1587,50 +1589,50 @@ async def list_templates(
                                 "file_url": file.get("webViewLink"),
                                 "type": "document"
                             })
-            print(f"Drive API: {len(templates)} files")
             
-    except Exception as e:
-        print(f"Drive API failed: {e} - using DB fallback")
+            print(f"Drive+Tags: {len(templates)} files")
+    except:
+        print("Drive failed - DB fallback")
     
-    # ✅ DB FALLBACK (Railway-safe)
-    if len(templates) == 0:
-        query = db.query(Document).join(DocumentTag).distinct()
-        docs = query.filter(
-            Document.file_url.isnot(None),
-            Document.size_bytes > 5000,
-            ~Document.title.ilike('%deleted%'),
-            ~Document.title.ilike('%temp%')
-        ).limit(50).all()
+    # ✅ FAST DB FALLBACK (0.1s SQL)
+    if len(templates) < 5:  # Need more
+        query = db.query(Document).join(DocumentTag).distinct(Document.id)
+        fallback_docs = query.filter(
+            Document.file_url.isnot(None)
+        ).order_by(Document.modified_at.desc()).limit(50).all()
         
-        for doc in docs:
+        for doc in fallback_docs:
+            if len(templates) >= 50:
+                break
+                
             doc_tags = db.query(Tag.name).join(DocumentTag).filter(
                 DocumentTag.document_id == doc.id
-            ).all()
+            ).distinct().limit(10).all()
             
-            templates.append({
+            templates.extend([{
                 "id": str(doc.id),
                 "name": doc.title,
                 "title": doc.title,
                 "owner": doc.owner_name or "Unknown",
                 "modifiedTime": doc.modified_at.isoformat() if doc.modified_at else None,
-                "size": doc.size_bytes or 0,
-                "mimeType": doc.mime_type or "",
+                "size": getattr(doc, 'size_bytes', 0),
+                "mimeType": getattr(doc, 'mime_type', ""),
                 "aiTags": [tag[0] for tag in doc_tags],
                 "tagCount": len(doc_tags),
                 "file_url": doc.file_url,
                 "type": "document"
-            })
-        print(f"DB fallback: {len(templates)} files")
+            }])
     
-    # All tags
+    # Global tags
     practice_areas = sorted(set(tag[0] for tag in db.query(Tag.name.distinct()).all()))
     
     print(f"Templates FINAL: {len(templates)}")
     return {
-        "templates": templates,
+        "templates": templates[:100],
         "practice_areas": practice_areas,
         "total": len(templates)
     }
+
 
 
 

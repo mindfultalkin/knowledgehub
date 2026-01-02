@@ -3,12 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge Hub - Your Google Drive</title>
-    <!-- Favicon & Fonts -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%231976d2'/><text x='50' y='70' font-size='60' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>K</text></svg>">
+    <title>Knowledge Hub | QL Partners LegalTech</title>
+    
+    <!-- Favicon - Law Firm Professional -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%231a365d'/><text x='50' y='70' font-size='60' text-anchor='middle' fill='%23d69e2e' font-family='serif' font-weight='bold'>Q</text></svg>">
+    
+    <!-- LAW FIRM FONTS - Elegant & Professional -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Source+Sans+Pro:ital,wght@0,200..900;1,200..900&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -27,50 +34,54 @@
     <script src="modules/modals.js"></script>
     <script src="app.js"></script>
     
-    <!-- Document Details Modal - Keep this HTML structure -->
+    <!-- Document Details Modal - ENHANCED LAW FIRM STYLE -->
     <div id="documentModal" class="modal">
         <div class="modal-overlay" onclick="window.closeModal()"></div>
         <div class="modal-content">
             <!-- Modal Header w/ Toggle Buttons -->
             <div class="modal-header">
                 <div>
-                    <h2 id="modalTitle">Document Details</h2>
-                    <p id="modalSubtitle" class="modal-subtitle"></p>
+                    <h2 id="modalTitle" class="modal-title-serif">Document Details</h2>
+                    <p id="modalSubtitle" class="modal-subtitle">Professional contract analysis</p>
                 </div>
                 <div class="toggle-buttons">
                     <button id="showClausesBtn" class="toggle-btn active" onclick="window.toggleView('clauses')">
-                        📋 Show Clauses
+                        <i class="fas fa-list-ul"></i> Clauses
                     </button>
                     <button id="showRiskBtn" class="toggle-btn" onclick="window.toggleView('risk')">
-                        📊 Show Risk Score
+                        <i class="fas fa-chart-line"></i> Risk Score
                     </button>
                 </div>
-                <button class="close-btn" onclick="window.closeModal()">×</button>
+                <button class="close-btn" onclick="window.closeModal()" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
             <!-- CLAUSES VIEW (DEFAULT) -->
-            <div id="clausesView" class="modal-view active" style="display: block;">
+            <div id="clausesView" class="modal-view active">
                 <div class="modal-body">
                     <div class="three-column-layout">
                         <!-- Clauses Column -->
                         <div class="modal-column clauses-column">
-                            <h3>📋 Clauses</h3>
+                            <h3><i class="fas fa-file-contract"></i> Contract Clauses</h3>
                             <div id="clausesList" class="clauses-list">
-                                <div class="loading-state">Loading clauses...</div>
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading clauses...
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Tags + Clause Content -->
+                        <!-- Tags + Selected Clause -->
                         <div class="modal-column content-column">
-                            <h3>🏷️ Tags</h3>
+                            <h3><i class="fas fa-tags"></i> AI Tags & Content</h3>
                             <div id="tagsContainer" class="tags-content"></div>
                             <div id="selectedClauseContainer" class="selected-clause-container" style="display: none;">
-                                <h3>📄 Selected Clause</h3>
+                                <h3><i class="fas fa-quote-left"></i> Selected Clause</h3>
                                 <div class="clause-display">
-                                    <h4 id="selectedClauseTitle"></h4>
+                                    <h4 id="selectedClauseTitle" class="clause-title-serif"></h4>
                                     <div id="selectedClauseContent" class="clause-content"></div>
                                     <button id="saveToLibraryBtn" class="btn-save-library" onclick="window.saveClauseToLibrary()">
-                                        💾 Save to Library
+                                        <i class="fas fa-save"></i> Save to Library
                                     </button>
                                 </div>
                             </div>
@@ -78,34 +89,37 @@
                         
                         <!-- Similar Files -->
                         <div class="modal-column info-column">
-                            <h3>🔗 Similar Files</h3>
+                            <h3><i class="fas fa-copy"></i> Similar Documents</h3>
                             <div id="similarFilesContent" class="similar-files-content">
-                                <div class="empty-state">Select a clause to find similar files</div>
+                                <div class="empty-state">
+                                    <i class="fas fa-search"></i><br>
+                                    Select a clause to find similar files
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- RISK SCORE TOGGLE VIEW (hidden initially) -->
-            <div id="riskView" class="modal-view" style="display: none;">
+            <!-- RISK SCORE VIEW -->
+            <div id="riskView" class="modal-view">
                 <div class="risk-score-section">
-                    <div class="risk-score-card">
+                    <div class="risk-score-card" id="riskScoreCard">
                         <div class="score-number" id="riskScoreNumber">--</div>
-                        <div class="score-label">RISK SCORE / 100</div>
+                        <div class="score-label">Overall Risk Score / 100</div>
                         <div class="score-description" id="riskScoreLevel">--</div>
                     </div>
                     <div class="risk-breakdown">
                         <div class="breakdown-item good">
-                            <strong>✓ Good Clauses:</strong>
+                            <strong><i class="fas fa-check-circle"></i> Protected Clauses</strong>
                             <ul id="goodClausesList"></ul>
                         </div>
                         <div class="breakdown-item caution">
-                            <strong>⚠️ Caution Items:</strong>
+                            <strong><i class="fas fa-exclamation-triangle"></i> Risk Areas</strong>
                             <ul id="cautionClausesList"></ul>
                         </div>
                         <div class="breakdown-item missing">
-                            <strong>❌ Missing Clauses:</strong>
+                            <strong><i class="fas fa-times-circle"></i> Missing Protections</strong>
                             <ul id="missingClausesList"></ul>
                         </div>
                     </div>
@@ -115,14 +129,13 @@
             <!-- Modal Footer -->
             <div class="modal-footer">
                 <button id="driveBtn" class="btn-secondary">
-                    📂 Open in Google Drive
+                    <i class="fab fa-google-drive"></i> Open in Drive
                 </button>
                 <button onclick="window.closeModal()" class="btn-primary">
-                    Close
+                    <i class="fas fa-times"></i> Close
                 </button>
             </div>
         </div>
     </div>
-
 </body>
 </html>

@@ -20,4 +20,4 @@ window.APP_CONFIG = {
     // Add other frontend configuration here
 };
 
-// console.log('🚀 Knowledge Hub Frontend initialized'); 
+console.log('🚀 Knowledge Hub Frontend initialized'); 

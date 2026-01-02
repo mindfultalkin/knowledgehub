@@ -33,19 +33,37 @@ function renderFileCard(file) {
 }
 
 // Attach file card listeners (ORIGINAL - opens modal only)
+// Replace attachFileCardListeners() in ui.js
 function attachFileCardListeners() {
+  // Grid cards
   document.querySelectorAll('.file-card').forEach(card => {
+    card.style.cursor = 'pointer';
     card.addEventListener('click', function() {
       const fileId = this.dataset.fileId;
-      const fileName = this.dataset.fileName;
-      const fileType = this.dataset.fileType;
-      
       if (fileId && window.openDocumentModal) {
-        window.openDocumentModal(fileId, fileName, fileType);
+        window.openDocumentModal(fileId, this.dataset.fileName, this.dataset.fileType);
       }
     });
   });
+  
+  // NEW: List rows
+  document.querySelectorAll('.file-list-row').forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function() {
+      const fileId = this.dataset.fileId;
+      if (fileId && window.openDocumentModal) {
+        window.openDocumentModal(fileId, row.querySelector('.name-cell .file-name')?.textContent);
+      }
+    });
+  });
+  
+  // Hover effects
+  document.querySelectorAll('.file-card, .file-list-row').forEach(el => {
+    el.addEventListener('mouseenter', () => el.style.transform = 'translateY(-2px)');
+    el.addEventListener('mouseleave', () => el.style.transform = 'none');
+  });
 }
+
 
 // Simple search result renderer
 function renderSimpleSearchResult(file) {
