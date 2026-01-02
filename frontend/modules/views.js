@@ -167,11 +167,18 @@ function renderSearch() {
 // Render files view
 // Render files view - WITH LIST/GRID TOGGLE
 function renderFiles() {
+  // 🔥 SORT TAGGED FILES FIRST
+  const sortedFiles = [...window.appState.files].sort((a, b) => {
+    const aHasTags = (a.aiTags?.length > 0 || a.tagCount > 0) ? 0 : 1;
+    const bHasTags = (b.aiTags?.length > 0 || b.tagCount > 0) ? 0 : 1;
+    return aHasTags - bHasTags;
+  }).slice(0, window.appState.filesPerPage || 24);
+
   return `
     <div class="view-container">
       <div class="view-header">
         <h1 class="view-title">📁 All Files</h1>
-        <p class="view-subtitle">Browse your Google Drive</p>
+        <p class="view-subtitle">Tagged files first ✓</p>
       </div>
       
       ${!window.appState.authenticated ? `
@@ -184,7 +191,7 @@ function renderFiles() {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <div>
             <span id="filesCount" style="font-weight: 600; color: var(--primary-color);">
-              ${window.appState.files.length} files
+              ${sortedFiles.length} files (Tagged first)
             </span>
           </div>
           <div style="display: flex; gap: 8px;">
@@ -202,10 +209,10 @@ function renderFiles() {
           </div>
         </div>
 
-        <!-- GRID VIEW (DEFAULT) -->
+        <!-- GRID VIEW -->
         ${window.appState.filesView !== 'list' ? `
           <div class="files-grid" id="filesGrid">
-            ${window.appState.files.slice(0, window.appState.filesPerPage).map(file => window.renderFileCard(file)).join('')}
+            ${sortedFiles.map(file => window.renderFileCard(file)).join('')}
           </div>
         ` : ''}
 
@@ -219,15 +226,15 @@ function renderFiles() {
               <span style="flex: 1; font-weight: 600; text-align: right;">💾 Size</span>
             </div>
             <div class="files-list-body">
-              ${window.appState.files.slice(0, window.appState.filesPerPage).map(file => window.renderFileListRow(file)).join('')}
+              ${sortedFiles.map(file => window.renderFileListRow(file)).join('')}
             </div>
           </div>
         ` : ''}
 
-        ${window.appState.files.length > window.appState.filesPerPage ? `
+        ${window.appState.files.length > (window.appState.filesPerPage || 24) ? `
           <div style="text-align: center; margin-top: 24px;">
             <p style="color: var(--text-secondary);">
-              Showing ${window.appState.filesPerPage} of ${window.appState.files.length} files
+              Showing ${sortedFiles.length} of ${window.appState.files.length} files (Tagged first)
             </p>
           </div>
         ` : ''}
@@ -235,6 +242,7 @@ function renderFiles() {
     </div>
   `;
 }
+
 // NEW: List row renderer
 function renderFileListRow(file) {
   const allTags = file.aiTags || [];

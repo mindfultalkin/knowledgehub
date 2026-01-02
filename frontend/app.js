@@ -36,8 +36,18 @@ if (!window.appState.filesView) {
 
 // Files view wrapper
 window.showFilesView = function() {
+  // 🔥 TAGGED FILES FIRST - PERFECT SORTING
+  const sortedFiles = [...window.appState.files].sort((a, b) => {
+    const aHasTags = (a.aiTags?.length > 0 || a.tagCount > 0) ? 0 : 1;
+    const bHasTags = (b.aiTags?.length > 0 || b.tagCount > 0) ? 0 : 1;
+    return aHasTags - bHasTags; // Tagged = 0 (top), No tags = 1 (bottom)
+  }).slice(0, window.appState.filesPerPage || 24);
+  
+  // Temporarily store sorted files for renderFiles()
+  window.appState.sortedFiles = sortedFiles;
+  
   const mainContent = document.querySelector('.main-content');
-  if (mainContent && window.renderFiles) {
+  if (mainContent) {
     mainContent.innerHTML = window.renderFiles();
     setTimeout(() => {
       if (window.attachFileCardListeners) window.attachFileCardListeners();
