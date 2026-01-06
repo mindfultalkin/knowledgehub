@@ -7,7 +7,8 @@ import json
 from models.metadata import DocumentTag
 from models.metadata import DocumentChunk, VectorEmbedding
 from models.metadata import Document, DocumentTag, Tag
-from models.metadata import PracticeArea, SubPracticeArea  # ADD THIS
+from models.metadata import PracticeArea, SubPracticeArea  
+from fastapi import Query# ADD THIS
 
 
 
@@ -1543,94 +1544,120 @@ async def cleanup_prod(db: Session = Depends(get_db)):
     return {"cleaned": orphans}
 
 
+from typing import Optional, List
+from fastapi import Query, HTTPException, Depends
+
 @router.get("/templates")
 async def list_templates(
-    practice_area: str = None, 
-    search: str = None,
+    practice_area: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Fast + Live Drive files + Tags (Local + Prod)"""
-    
-    templates = []
-    
-    # ✅ PRIMARY: Live Drive files + tags (0 deleted)
     try:
-        if 'drive_client' in globals() and drive_client and drive_client.creds:
-            results = drive_client.list_files(200, None, None)
-            drive_files = results.get('files', [])
-            
-            for file in drive_files:
-                # Fast tag lookup
-                doc = db.query(Document).filter(
-                    Document.drive_file_id == file['id']
-                ).first()
-                
-                if doc:
-                    doc_tags = db.query(Tag.name).filter(
-                        DocumentTag.document_id == doc.id
-                    ).join(DocumentTag).distinct().limit(10).all()
-                    
-                    if doc_tags:
-                        ai_tags = [tag[0] for tag in doc_tags]
-                        
-                        # Fast Python filter (small list)
-                        if (not search or search.lower() in file['name'].lower()) and \
-                           (not practice_area or any(practice_area.lower() in tag.lower() for tag in ai_tags)):
-                            templates.append({
-                                "id": file['id'],
-                                "name": file['name'],
-                                "title": file['name'],
-                                "owner": file.get("owners", [{}])[0].get("displayName", "Unknown"),
-                                "modifiedTime": file.get("modifiedTime"),
-                                "size": file.get("size", 0),
-                                "mimeType": file.get("mimeType"),
-                                "aiTags": ai_tags,
-                                "tagCount": len(ai_tags),
-                                "file_url": file.get("webViewLink"),
-                                "type": "document"
-                            })
-            
-            print(f"Drive+Tags: {len(templates)} files")
-    except:
-        print("Drive failed - DB fallback")
-    
-    # ✅ FAST DB FALLBACK (0.1s SQL)
-    if len(templates) < 5:  # Need more
-        query = db.query(Document).join(DocumentTag).distinct(Document.id)
-        fallback_docs = query.filter(
-            Document.file_url.isnot(None)
-        ).order_by(Document.modified_at.desc()).limit(50).all()
+        current_user = get_current_user_email()
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Not authenticated")
         
-        for doc in fallback_docs:
-            if len(templates) >= 50:
-                break
+        templates = []
+        
+        # 1. Clean orphans
+        db.query(Document).filter(
+            Document.account_email == current_user,
+            Document.drive_file_id.is_(None)
+        ).delete(synchronize_session=False)
+        db.commit()
+        
+        # 2. Live Drive files with tags
+        drive_files_with_tags = []
+        try:
+            if 'drive_client' in globals() and drive_client and drive_client.creds:
+                results = drive_client.list_files(page_size=100)
+                drive_files = results.get('files', [])
                 
-            doc_tags = db.query(Tag.name).join(DocumentTag).filter(
-                DocumentTag.document_id == doc.id
-            ).distinct().limit(10).all()
+                for file in drive_files:
+                    doc = db.query(Document).filter(
+                        Document.drive_file_id == file['id'],
+                        Document.account_email == current_user
+                    ).first()
+                    
+                    if doc:
+                        tags = db.query(Tag.name).join(DocumentTag).filter(
+                            DocumentTag.document_id == doc.id
+                        ).distinct().limit(10).all()
+                        
+                        if tags:
+                            drive_files_with_tags.append((file, [t[0] for t in tags]))
+        except Exception as e:
+            print(f"Drive skip: {e}")
+        
+        # 3. Filter templates
+        for file, ai_tags in drive_files_with_tags:
+            name_lower = file['name'].lower()
+            tags_lower = [t.lower() for t in ai_tags]
             
-            templates.extend([{
-                "id": str(doc.id),
-                "name": doc.title,
-                "title": doc.title,
-                "owner": doc.owner_name or "Unknown",
-                "modifiedTime": doc.modified_at.isoformat() if doc.modified_at else None,
-                "size": getattr(doc, 'size_bytes', 0),
-                "mimeType": getattr(doc, 'mime_type', ""),
-                "aiTags": [tag[0] for tag in doc_tags],
-                "tagCount": len(doc_tags),
-                "file_url": doc.file_url,
+            if search and search.lower() not in name_lower and not any(search.lower() in t for t in tags_lower):
+                continue
+            if practice_area and not any(practice_area.lower() in t for t in tags_lower):
+                continue
+            
+            templates.append({
+                "id": file['id'],
+                "name": file['name'],
+                "title": file['name'],
+                "owner": file.get("owners", [{}])[0].get("displayName", "Unknown"),
+                "modifiedTime": file.get("modifiedTime"),
+                "size": int(file.get("size", 0)),
+                "mimeType": file.get("mimeType", ""),
+                "aiTags": ai_tags,
+                "tagCount": len(ai_tags),
+                "fileUrl": file.get("webViewLink"),
                 "type": "document"
-            }])
+            })
+        
+        # 🔥 4. ALL USER TAGS (fixed variable name)
+        practice_areas_query = db.query(Tag.name.distinct()).join(DocumentTag).join(Document).filter(
+            Document.account_email == current_user,
+            Document.drive_file_id.is_not(None)
+        ).order_by(Tag.name.asc()).limit(100).all()
+        
+        practice_areas = [area[0] for area in practice_areas_query]  # ✅ Fixed name
+        
+        print(f"✅ Templates: {len(templates)} | Tags: {len(practice_areas)}")
+        
+        return {
+            "templates": templates,
+            "practice_areas": practice_areas,  # ✅ Consistent name
+            "total": len(templates)
+        }
+        
+    except Exception as e:
+        print(f"Templates error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+
+
+
+
+@router.post("/templates/cleanup-prod")
+async def cleanup_templates(db: Session = Depends(get_db)):
+    """Remove deleted/orphan files from templates"""
+    current_user = get_current_user_email()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Global tags
-    practice_areas = sorted(set(tag[0] for tag in db.query(Tag.name.distinct()).all()))
+    # Delete orphans: no drive file + zero size + no URL
+    orphans = db.query(Document).filter(
+        Document.account_email == current_user,
+        Document.drive_fileid.is_(None),
+        Document.size_bytes == 0,
+        Document.file_url.is_(None)
+    ).delete(synchronize_session=False)
+    db.commit()
     
-    print(f"Templates FINAL: {len(templates)}")
     return {
-        "templates": templates[:100],
-        "practice_areas": practice_areas,
-        "total": len(templates)
+        "cleaned": orphans,
+        "message": f"Removed {orphans} orphan template records"
     }
 
 
