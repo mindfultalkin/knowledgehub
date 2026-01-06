@@ -1,17 +1,7 @@
 // modules/views.js - View Rendering
 console.log('Loading views.js...');
 
-// 🔥 ADD THIS EXACTLY HERE - Line 3
-window.debounce = window.debounce || function(func, wait) {
-  let timeout;
-  return function(...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-};
-
 // Render dashboard
-// Render dashboard - WITH TAG CLOUD
 function renderDashboard() {
   const stats = {
     totalFiles: window.appState.files.length,
@@ -37,17 +27,6 @@ function renderDashboard() {
     }).length
   };
   
-  // 🔥 TAG CLOUD DATA
-  const allTags = {};
-  window.appState.files.forEach(file => {
-    (file.aiTags || []).forEach(tag => {
-      allTags[tag] = (allTags[tag] || 0) + 1;
-    });
-  });
-  const sortedTags = Object.entries(allTags)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 12); // Top 12 tags
-  
   return `
     <div class="view-container">
       <div class="view-header">
@@ -66,7 +45,6 @@ function renderDashboard() {
           </div>
         </div>
       ` : `
-        <!-- Stats Grid -->
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon">📁</div>
@@ -89,8 +67,7 @@ function renderDashboard() {
             <div class="stat-label">Practice Notes</div>
           </div>
         </div>
-
-        <!-- Google Drive Connection -->
+        
         ${window.appState.driveInfo ? `
           <div class="card mb-lg">
             <h2 class="card-title">☁️ Google Drive Connection</h2>
@@ -99,60 +76,25 @@ function renderDashboard() {
               <div><strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span></div>
               <div><strong>Total Files:</strong> ${stats.totalFiles}</div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="action-button" onclick="window.refreshFiles()">🔄 Refresh</button>
-                <button class="action-button" onclick="window.uploadFiles()">📤 Upload</button>
-                <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Record">🎤</button>
-                <button class="action-button" onclick="window.openNoteModal()">📝 Note</button>
+                <button class="action-button" onclick="window.refreshFiles()">🔄 Refresh Drive</button>
+                <button class="action-button" onclick="window.uploadFiles()">📤 Upload Files</button>
+                <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Recording">🎤 Voice Record</button>
+                <button class="action-button" onclick="window.openNoteModal()">📝 Add Note</button>
               </div>
             </div>
           </div>
         ` : ''}
-
-        <!-- 🔥 PROFESSIONAL TAG CLOUD -->
-        ${sortedTags.length > 0 ? `
-          <div class="card mb-lg">
-            <h2 class="card-title" style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
-              <i class="fas fa-tags" style="color: var(--primary-color);"></i>
-              Top Tags
-              <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">
-                (${sortedTags.length} total)
-              </span>
-            </h2>
-            <div class="tag-cloud-dashboard">
-              ${sortedTags.map(([tag, count]) => `
-                <span class="dashboard-tag" 
-                      data-count="${count >= 5 ? '5+' : count}"
-                      onclick="window.searchByTag('${tag.replace(/'/g, "\\'")}')"
-                      title="Search ${tag} (${count} files)">
-                  ${tag}
-                </span>
-              `).join('')}
-            </div>
+        
+        <h2 class="view-title" style="margin-top: 32px;">📌 Recent Files</h2>
+        ${window.appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : `
+          <div class="files-grid">
+            ${window.appState.files.slice(0, 6).map(file => window.renderFileCard(file)).join('')}
           </div>
-        ` : ''}
-
-
-        <!-- 4 Recent Files -->
-        <div class="recent-files-section">
-          <h2 class="view-title">📌 Recent Files (4)</h2>
-          ${window.appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : `
-            <div class="files-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-              ${window.appState.files.slice(0, 4).map(file => window.renderFileCard(file)).join('')}
-            </div>
-            ${window.appState.files.length > 4 ? `
-              <div style="text-align: center; margin-top: 1.5rem;">
-                <button class="action-button" onclick="window.navigateTo('files')" style="background: var(--primary-color);">
-                  📁 View All Files (${window.appState.files.length})
-                </button>
-              </div>
-            ` : ''}
-          `}
-        </div>
+        `}
       `}
     </div>
   `;
 }
-
 
 // Render search view
 function renderSearch() {
@@ -336,13 +278,12 @@ function renderFileListRow(file) {
 
 
 // NEW: Template Library View
-// FIXED: Template Library View - Full API Integration
 function renderTemplates() {
   return `
     <div class="view-container">
       <div class="view-header">
         <h1 class="view-title">📄 Template Library</h1>
-        <p class="view-subtitle">All tagged templates + practice areas</p>
+        <p class="view-subtitle">Filter by Practice Area, Tags, or Search</p>
       </div>
       
       ${!window.appState.authenticated ? `
@@ -350,53 +291,35 @@ function renderTemplates() {
           <button class="connect-button" onclick="window.navigateTo('dashboard')">Connect Drive</button>
         </div>
       ` : `
-        <!-- VIEW TOGGLE BUTTONS -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-          <div>
-            <span id="templateCount" style="font-weight: 600; color: var(--primary-color);">Loading...</span>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="action-button ${window.appState.filesView === 'grid' ? 'active-view-btn' : ''}" 
-                    onclick="window.toggleTemplatesView('grid')" title="Grid View">
-              🗂️ Grid
-            </button>
-            <button class="action-button ${window.appState.filesView === 'list' ? 'active-view-btn' : ''}" 
-                    onclick="window.toggleTemplatesView('list')" title="List View">
-              📋 List
-            </button>
-            <button class="action-button" onclick="window.loadTemplates()" style="background: var(--accent-color);">
+        <div class="card mb-lg" style="padding: 20px;">
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
+            <div style="flex: 1; min-width: 250px;">
+              <label style="display: block; margin-bottom: 4px; font-weight: 600;">Search</label>
+              <input type="text" id="templateSearch" placeholder="employment, NDA, service agreement..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
+            </div>
+            
+            <div style="min-width: 220px;">
+              <label style="display: block; margin-bottom: 4px; font-weight: 600;">Practice Area</label>
+              <select id="practiceAreaFilter" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
+                <option value="">Loading practice areas...</option>
+              </select>
+            </div>
+            
+            <button class="action-button" onclick="window.loadTemplates()" style="white-space: nowrap;">
               🔄 Refresh
             </button>
           </div>
         </div>
-
-        <!-- FIXED: Search + Practice Area SIDE-BY-SIDE -->
-        <div class="card mb-lg" style="padding: 20px;">
-          <div style="display: flex; gap: 16px; align-items: end; max-width: 800px;">
-            <!-- Search - Left, wider -->
-            <div style="flex: 2; min-width: 300px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">🔍 Search Templates</label>
-              <input type="text" id="templateSearch" placeholder="employment, NDA, service agreement..." 
-                     style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
-                     oninput="window.loadTemplatesDebounced()">
-            </div>
-            
-            <!-- Practice Area - Right, compact -->
-            <div style="flex: 1; min-width: 220px; max-width: 280px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">📋 Practice Area</label>
-              <select id="practiceAreaFilter" 
-                      style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
-                      onchange="window.loadTemplates()">
-                <option value="">All Areas (Loading...)</option>
-              </select>
-          </div>
+        
+        <div class="stats-row" style="margin-bottom: 20px;">
+          <span id="templateCount" style="font-weight: 600; color: var(--primary-color);">Loading...</span>
+          <span style="color: var(--text-secondary);">files found</span>
         </div>
-
-        <!-- CONTENT CONTAINER -->
-        <div id="templatesContent">
-          <div class="loading">
-            <div class="spinner"></div>
-            <p>Loading templates...</p>
+        
+        <div id="templatesGrid" class="files-grid">
+          <div class="empty-state">
+            <div style="font-size: 4rem;">📄</div>
+            <h3>Loading templates...</h3>
           </div>
         </div>
       `}
@@ -404,107 +327,59 @@ function renderTemplates() {
   `;
 }
 
-
-
-
 window.loadTemplates = async function() {
   try {
-    const contentContainer = document.getElementById('templatesContent');
-    if (!contentContainer) return console.error('Templates container missing');
-    
-    contentContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading...</p></div>';
-
-    // ✅ GET FILTER VALUES
-    const searchInput = document.getElementById('templateSearch');
-    const practiceSelect = document.getElementById('practiceAreaFilter');
-    
-    const search = searchInput ? searchInput.value.trim() : '';
-    const practiceArea = practiceSelect ? practiceSelect.value : '';
-
     const params = new URLSearchParams();
+    const search = document.getElementById('templateSearch')?.value;
+    const practiceArea = document.getElementById('practiceAreaFilter')?.value;
+    
     if (search) params.set('search', search);
-    if (practiceArea) params.set('practice_area', practiceArea);  // ✅ Backend expects 'practice_area'
-
+    if (practiceArea) params.set('practice_area', practiceArea);
+    
     const response = await fetch(`${window.API_BASE_URL}/templates?${params}`);
     const data = await response.json();
-
+    
+    const grid = document.getElementById('templatesGrid');
     const countEl = document.getElementById('templateCount');
-
-    if (data.templates && data.templates.length > 0) {
-      // GRID VIEW
-      if (window.appState.filesView !== 'list') {
-        contentContainer.innerHTML = `
-          <div class="files-grid" id="templatesGrid">
-            ${data.templates.map(file => window.renderFileCard(file)).join('')}
+    const practiceSelect = document.getElementById('practiceAreaFilter');
+    
+    if (grid && data.templates) {
+      if (data.templates.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <div style="font-size: 4rem;">📄</div>
+            <h3>No templates match your filters</h3>
+            <p>Try "employment", "HR", "service agreement", "NDA"</p>
           </div>
         `;
-        setTimeout(() => {
-          if (window.attachFileCardListeners) window.attachFileCardListeners();
-        }, 100);
       } else {
-        // LIST VIEW
-        contentContainer.innerHTML = `
-          <div class="files-list-container" id="templatesList">
-            <div class="files-list-header">
-              <span style="flex: 3; font-weight: 600;">📄 Template Name</span>
-              <span style="flex: 1; font-weight: 600; text-align: center;">🏷️ Tags</span>
-              <span style="flex: 1; font-weight: 600; text-align: center;">📅 Modified</span>
-              <span style="flex: 1; font-weight: 600; text-align: right;">💾 Size</span>
-            </div>
-            <div class="files-list-body">
-              ${data.templates.map(file => window.renderFileListRow(file)).join('')}
-            </div>
-          </div>
-        `;
-        setTimeout(() => {
-          if (window.attachFileCardListeners) window.attachFileCardListeners();
-        }, 100);
+        // ✅ Use renderFileCard for perfect file display
+        grid.innerHTML = data.templates.map(file => window.renderFileCard(file)).join('');
+        window.attachFileCardListeners();
+        
+        // Update count
+        if (countEl) countEl.textContent = data.total || data.templates.length;
       }
       
-      // ✅ UPDATE COUNTER
-      if (countEl) {
-        countEl.textContent = `${data.total || data.templates.length} templates`;
-      }
-      
-      // ✅ RE-POPULATE DROPDOWN (preserves selection)
-      if (practiceSelect && data.practice_areas && Array.isArray(data.practice_areas)) {
-        const currentValue = practiceSelect.value;
+      // ✅ Populate practice area dropdown
+      if (practiceSelect && data.practice_areas) {
         practiceSelect.innerHTML = `
-          <option value="">All Areas (${data.practice_areas.length})</option>
-          ${data.practice_areas.map(area => 
-            `<option value="${area}" ${area === currentValue ? 'selected' : ''}>${area}</option>`
-          ).join('')}
+          <option value="">All Practice Areas (${data.practice_areas.length})</option>
+          ${data.practice_areas.map(area => `<option value="${area}">${area}</option>`).join('')}
         `;
       }
-    } else {
-      contentContainer.innerHTML = `
-        <div class="empty-state">
-          <div style="font-size: 4rem;">📄</div>
-          <h3>No templates match filters</h3>
-          <p>Try different search or practice area</p>
-        </div>
-      `;
-      if (countEl) countEl.textContent = '0 templates';
     }
   } catch (error) {
     console.error('Templates load error:', error);
-    const contentContainer = document.getElementById('templatesContent');
-    if (contentContainer) {
-      contentContainer.innerHTML = `
-        <div class="empty-state" style="color: #f44336;">
-          <div style="font-size: 4rem;">⚠️</div>
-          <h3>Failed to load templates</h3>
-          <p>Check: ${error.message}</p>
-        </div>
-      `;
-    }
+    document.getElementById('templatesGrid').innerHTML = `
+      <div class="empty-state">
+        <div style="font-size: 4rem; color: #f44336;">⚠️</div>
+        <h3>Connection error</h3>
+        <p>Check backend is running on port 8000</p>
+      </div>
+    `;
   }
 };
-
-
-// 🔥 ADD THIS EXACTLY AFTER renderTemplates() function
-window.loadTemplatesDebounced = window.debounce(window.loadTemplates, 300);
-
 
 
 // Render AI tags view
@@ -666,6 +541,56 @@ function renderSettings() {
     </div>
   `;
 }
+
+// NEW: Template Functions
+window.loadTemplates = async function() {
+  try {
+    const params = new URLSearchParams();
+    const search = document.getElementById('templateSearch')?.value;
+    const practiceArea = document.getElementById('practiceAreaFilter')?.value;
+    const subPractice = document.getElementById('subPracticeFilter')?.value;
+    
+    if (search) params.set('search', search);
+    if (practiceArea) params.set('practice_area', practiceArea);
+    if (subPractice) params.set('sub_practice', subPractice);
+    
+    const response = await fetch(`${window.API_BASE_URL}/templates?${params}`);
+    const data = await response.json();
+    
+    const grid = document.getElementById('templatesGrid');
+    if (grid && data.templates) {
+      if (data.templates.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <div style="font-size: 4rem;">📄</div>
+            <h3>No templates match your filters</h3>
+            <p>Try "employment", "HR policy", "service agreement"</p>
+          </div>
+        `;
+      } else {
+        grid.innerHTML = data.templates.map(file => window.renderFileCard(file)).join('');
+        window.attachFileCardListeners();
+        
+        // Populate practice area dropdown
+        if (data.practice_areas) {
+          const select = document.getElementById('practiceAreaFilter');
+          if (select) {
+            select.innerHTML = '<option value="">All Practice Areas</option>' + 
+              data.practice_areas.map(area => `<option value="${area}">${area}</option>`).join('');
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Templates error:', error);
+    document.getElementById('templatesGrid').innerHTML = `
+      <div class="empty-state">
+        <div style="font-size: 4rem; color: #f44336;">⚠️</div>
+        <h3>Backend error</h3>
+      </div>
+    `;
+  }
+};
 // Auto-load on filter change
 document.addEventListener('change', function(e) {
   if (e.target.id === 'practiceAreaFilter' || e.target.id === 'subPracticeFilter' || e.target.id === 'templateSearch') {

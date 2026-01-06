@@ -31,9 +31,8 @@ window.toggleFilesView = function(viewType) {
 
 // Initialize filesView state
 if (!window.appState.filesView) {
-  window.appState.filesView = 'list';  // List is now default for ALL file views
+  window.appState.filesView = 'grid';
 }
-
 
 // Files view wrapper
 window.showFilesView = function() {
@@ -55,20 +54,6 @@ window.showFilesView = function() {
     }, 100);
   }
 };
-
-window.toggleTemplatesView = function(viewType) {
-  window.appState.filesView = viewType || 'list';
-  
-  // Re-render + immediately reload data
-  const mainContent = document.querySelector('.main-content');
-  if (mainContent) {
-    mainContent.innerHTML = window.renderTemplates();
-    // Load data immediately after render
-    setTimeout(() => window.loadTemplates(), 50);
-  }
-};
-
-
 
 // Initialize application
 async function initApp() {
@@ -110,13 +95,18 @@ async function initApp() {
             </button>
           </li>
           <li class="nav-item">
-            <button class="nav-link" data-view="files" onclick="window.navigateTo('files'); window.appState.filesView='list';">
+            <button class="nav-link" data-view="files" onclick="window.navigateTo('files')">
               <span class="nav-icon">📁</span><span>Files</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="search" onclick="window.navigateTo('search')">
               <span class="nav-icon">🔍</span><span>Search</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-view="ai-tags" onclick="window.navigateTo('ai-tags')">
+              <span class="nav-icon">🏷️</span><span>AI Tags</span>
             </button>
           </li>
           <li class="nav-item">
@@ -177,11 +167,9 @@ window.showTemplatesView = function() {
   const mainContent = document.querySelector('.main-content');
   if (mainContent && window.renderTemplates) {
     mainContent.innerHTML = window.renderTemplates();
-    // ✅ Always load data after render
-    setTimeout(() => window.loadTemplates(), 100);
+    if (window.loadTemplates) window.loadTemplates();
   }
 };
-
 
 // View wrapper functions
 window.showDashboard = function() {

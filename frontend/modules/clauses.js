@@ -258,7 +258,6 @@ async function viewClauseFiles(clauseId, event) {
 
 // Show clause files modal
 // 🔥 PREMIUM "Files with this Clause" Modal
-// 🔥 FIXED: Scrollable Modal - Shows ALL Files + Badge Only
 function showClauseFilesModal(data) {
   const modal = document.createElement('div');
   modal.className = 'modal';
@@ -266,95 +265,75 @@ function showClauseFilesModal(data) {
   modal.id = 'clauseFilesModal';
   
   const filesHtml = data.files && data.files.length > 0 ? 
-    data.files.map((file, index) => {
+    data.files.map(file => {
       const matchType = file.match_type || 'similar';
-      const badgeClass = matchType === 'exact' ? 'badge-exact' : 'badge-similar';
+      const badgeClass = matchType === 'exact' ? 'exact' : 'similar';
       const icon = window.getFileIcon ? window.getFileIcon(file.mimeType, file.title) : '📄';
       
       return `
-        <div class="clause-file-item ${matchType}" onclick="window.viewFile('${file.id}')" title="Open ${file.title}">
+        <div class="clause-file-item" onclick="window.viewFile('${file.id}')" title="Open ${file.title}">
           <div class="file-icon">${icon}</div>
           <div class="file-details">
             <div class="file-title">${window.escapeHtml(file.title)}</div>
-            <div class="file-meta">
-              <span class="date-small">${window.formatDate(file.modified_at)}</span>
-              <span class="owner-small">${file.owner || 'Unknown'}</span>
+            <div class="file-meta-small">
+              <span>📅 ${window.formatDate(file.modified_at)}</span>
+              <span style="color: var(--text-secondary);">👤 ${file.owner || 'Unknown'}</span>
             </div>
           </div>
-          <span class="match-badge ${badgeClass}">
-            ${matchType === 'exact' ? 'EXACT' : 'SIMILAR'}
-          </span>
+          <span class="match-badge ${badgeClass}">${matchType.toUpperCase()}</span>
+          <button class="btn-open-file">
+            <i class="fas fa-external-link-alt"></i> Open
+          </button>
         </div>
       `;
     }).join('') : `
-      <div class="empty-state" style="grid-column: 1/-1; text-align: center; padding: 3rem;">
-        <i class="fas fa-search" style="font-size: 4rem; color: var(--border-color);"></i>
-        <h3 style="color: var(--text-primary);">No matching files</h3>
+      <div class="empty-state" style="text-align: center; padding: 3rem;">
+        <i class="fas fa-inbox" style="font-size: 4rem; color: var(--border-color);"></i>
+        <h3 style="color: var(--text-primary);">No files found</h3>
         <p style="color: var(--text-secondary);">No documents contain this clause</p>
       </div>
     `;
   
   modal.innerHTML = `
-    <div class="modal-overlay" onclick="document.getElementById('clauseFilesModal')?.remove()"></div>
-    <div class="modal-content" style="width: 95%; max-width: 1000px; max-height: 90vh;">
-      <!-- Header -->
+    <div class="modal-overlay" onclick="this.parentNode.remove()"></div>
+    <div class="modal-content" style="max-width: 900px; max-height: 85vh;">
       <div class="modal-header">
         <div>
-          <h2 style="margin: 0; display: flex; align-items: center; gap: 12px;">
-            <i class="fas fa-file-contract"></i>
-            ${window.escapeHtml(data.clause_title || 'Clause Files')}
-          </h2>
-          <p class="modal-subtitle" style="margin: 8px 0 0 0; color: var(--primary-color); font-weight: 600;">
-            ${data.files ? data.files.length : 0} file(s) found
+          <h2 style="margin: 0;">📋 ${window.escapeHtml(data.clause_title || 'Clause Files')}</h2>
+          <p class="modal-subtitle" style="margin: 4px 0 0 0;">
+            ${data.files ? data.files.length : 0} file(s) contain this clause
           </p>
         </div>
-        <button class="close-btn" onclick="document.getElementById('clauseFilesModal')?.remove()" title="Close (Esc)">
+        <button class="close-btn" onclick="this.closest('.modal').remove()" title="Close">
           <i class="fas fa-times"></i>
         </button>
       </div>
       
-      <!-- Clause Preview -->
-      ${data.clause_content ? `
-        <div class="clause-preview" style="padding: 1.5rem; margin: 0; background: var(--bg-secondary); border-radius: 0 0 12px 12px; border-bottom: 1px solid var(--border-color);">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <i class="fas fa-quote-left" style="color: var(--primary-color); font-size: 1.4rem;"></i>
-            <strong style="color: var(--primary-color);">Clause Preview:</strong>
+      <div class="modal-body" style="padding: 2rem;">
+        <!-- Clause Preview -->
+        ${data.clause_content ? `
+          <div class="clause-content-preview" style="margin-bottom: 2rem; padding: 1.5rem; background: var(--bg-tertiary); border-radius: 12px; border-left: 4px solid var(--primary-color);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+              <i class="fas fa-quote-left" style="color: var(--primary-color); font-size: 1.5rem;"></i>
+              <strong style="color: var(--primary-color);">Clause Preview:</strong>
+            </div>
+            <div style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem; max-height: 120px; overflow: hidden;">
+              ${window.escapeHtml(data.clause_content).substring(0, 400)}${data.clause_content.length > 400 ? '...' : ''}
+            </div>
           </div>
-          <div style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem; max-height: 100px; overflow: hidden; position: relative;">
-            ${window.escapeHtml(data.clause_content).substring(0, 350)}${data.clause_content.length > 350 ? '...' : ''}
-          </div>
-        </div>
-      ` : ''}
-      
-      <!-- 🔥 SCROLLABLE FILES GRID - Shows ALL 7 Files -->
-      <div class="modal-body">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
-          <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
+        ` : ''}
+        
+        <!-- Files List -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <h3 style="margin: 0 0 1rem 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
             <i class="fas fa-file-contract"></i> Files Containing This Clause
           </h3>
-          <span style="color: var(--primary-color); font-weight: 600; font-size: 1.1rem;">
-            ${data.files ? data.files.length : 0} total
-          </span>
-        </div>
-        
-        <div class="clause-files-grid" style="max-height: 450px; overflow-y: auto; padding-right: 8px;">
-          <!-- Custom scrollbar -->
-          <style>
-            .clause-files-grid::-webkit-scrollbar { width: 6px; }
-            .clause-files-grid::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 3px; }
-            .clause-files-grid::-webkit-scrollbar-thumb { 
-              background: var(--border-color); border-radius: 3px; 
-            }
-            .clause-files-grid::-webkit-scrollbar-thumb:hover { background: var(--primary-color); }
-          </style>
-          ${filesHtml}
+          <div class="clause-files-list">${filesHtml}</div>
         </div>
       </div>
       
-      <!-- Footer -->
-      <div class="modal-footer" style="justify-content: flex-end; padding: 1rem 1.5rem;">
-        <button onclick="document.getElementById('clauseFilesModal')?.remove()" 
-                class="btn-secondary" style="min-width: 120px;">
+      <div class="modal-footer">
+        <button onclick="this.closest('.modal').remove()" class="btn-primary" style="min-width: 140px;">
           <i class="fas fa-times"></i> Close
         </button>
       </div>
@@ -362,17 +341,7 @@ function showClauseFilesModal(data) {
   `;
   
   document.body.appendChild(modal);
-  
-  // ESC key close
-  const escHandler = (e) => {
-    if (e.key === 'Escape') {
-      modal.remove();
-      document.removeEventListener('keydown', escHandler);
-    }
-  };
-  document.addEventListener('keydown', escHandler);
 }
-
 
 
 // Close clause files modal
