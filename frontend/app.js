@@ -1,7 +1,7 @@
 // app.js - Main Application Entry Point (FIXED LIST/GRID)
 console.log('Loading app.js...');
 
-// 🔥 LIST/GRID TOGGLE FUNCTIONS - ADD FIRST
+// LIST/GRID TOGGLE FUNCTIONS - ADD FIRST
 window.toggleFilesView = function(viewType) {
   window.appState.filesView = viewType || 'grid';
   
@@ -25,7 +25,7 @@ window.toggleFilesView = function(viewType) {
   }, 150);
   
   if (window.showNotification) {
-    window.showNotification(`📁 ${viewType === 'list' ? 'List' : 'Grid'} view`, 'success');
+    window.showNotification(`${viewType === 'list' ? 'List' : 'Grid'} view`, 'success');
   }
 };
 
@@ -34,10 +34,9 @@ if (!window.appState.filesView) {
   window.appState.filesView = 'list';  // List is now default for ALL file views
 }
 
-
 // Files view wrapper
 window.showFilesView = function() {
-  // 🔥 TAGGED FILES FIRST - PERFECT SORTING
+  // TAGGED FILES FIRST - PERFECT SORTING
   const sortedFiles = [...window.appState.files].sort((a, b) => {
     const aHasTags = (a.aiTags?.length > 0 || a.tagCount > 0) ? 0 : 1;
     const bHasTags = (b.aiTags?.length > 0 || b.tagCount > 0) ? 0 : 1;
@@ -68,8 +67,6 @@ window.toggleTemplatesView = function(viewType) {
   }
 };
 
-
-
 // Initialize application
 async function initApp() {
   console.log('Initializing app...');
@@ -83,7 +80,7 @@ async function initApp() {
   root.innerHTML = `
     <header class="app-header">
       <div class="app-title">
-        <img src="QL partners logo.jpeg" alt="Company Logo" class="app-logo">🎓 Knowledge Hub
+        <img src="QL partners logo.jpeg" alt="Company Logo" class="app-logo">Knowledge Hub
       </div>
       <div class="connection-status" id="connectionStatus">
         <div class="status-dot" style="background: #666;"></div>
@@ -96,32 +93,32 @@ async function initApp() {
         <ul class="nav-menu">
           <li class="nav-item">
             <button class="nav-link active" data-view="dashboard" onclick="window.navigateTo('dashboard')">
-              <span class="nav-icon">📊</span><span>Dashboard</span>
+              <span class="nav-icon"></span><span>Dashboard</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="templates" onclick="window.navigateTo('templates')">
-              <span class="nav-icon">📄</span><span>Templates</span>
+              <span class="nav-icon"></span><span>Templates</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="clause-library" onclick="window.navigateTo('clause-library')">
-              <span class="nav-icon">📋</span><span>Clauses</span>
+              <span class="nav-icon"></span><span>Clauses</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="files" onclick="window.navigateTo('files'); window.appState.filesView='list';">
-              <span class="nav-icon">📁</span><span>Files</span>
+              <span class="nav-icon"></span><span>Files</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="search" onclick="window.navigateTo('search')">
-              <span class="nav-icon">🔍</span><span>Search</span>
+              <span class="nav-icon"></span><span>Search</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="settings" onclick="window.navigateTo('settings')">
-              <span class="nav-icon">⚙️</span><span>Settings</span>
+              <span class="nav-icon"></span><span>Settings</span>
             </button>
           </li>
         </ul>
@@ -161,7 +158,7 @@ async function initApp() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('auth') === 'success') {
       window.history.replaceState({}, document.title, window.location.pathname);
-      if (window.showNotification) window.showNotification('✅ Connected successfully!', 'success');
+      if (window.showNotification) window.showNotification('Connected successfully!', 'success');
     }
     
   } catch (error) {
@@ -177,11 +174,10 @@ window.showTemplatesView = function() {
   const mainContent = document.querySelector('.main-content');
   if (mainContent && window.renderTemplates) {
     mainContent.innerHTML = window.renderTemplates();
-    // ✅ Always load data after render
+    // Always load data after render
     setTimeout(() => window.loadTemplates(), 100);
   }
 };
-
 
 // View wrapper functions
 window.showDashboard = function() {
@@ -244,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check core dependencies
     if (window.appState && document.getElementById('app-root')) {
-      console.log('✅ Dependencies ready');
+      console.log('Dependencies ready');
       initApp();
     } else {
       setTimeout(safeInit, 200);

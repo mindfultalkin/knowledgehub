@@ -28,41 +28,41 @@ function formatFileSize(bytes) {
   return (numBytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
 }
 
-// Get file icon
+// Get file icon - REPLACED ALL EMOJIS WITH CSS CLASSES
 function getFileIcon(mimeType, fileName = '') {
   const nameLower = fileName.toLowerCase();
   
   // Check filename first
-  if (nameLower.includes('contract') || nameLower.includes('agreement')) return '📜';
-  if (nameLower.includes('rental') || nameLower.includes('lease')) return '🏠';
-  if (nameLower.includes('employment') || nameLower.includes('employee')) return '👔';
-  if (nameLower.includes('clause')) return '📋';
-  if (nameLower.includes('note') || nameLower.includes('memo')) return '📝';
-  if (nameLower.includes('practice')) return '⚖️';
-  if (nameLower.includes('template')) return '📄';
-  if (nameLower.includes('invoice') || nameLower.includes('bill')) return '🧾';
-  if (nameLower.includes('receipt')) return '🧾';
-  if (nameLower.includes('report')) return '📊';
-  if (nameLower.includes('certificate') || nameLower.includes('cert')) return '🎓';
-  if (nameLower.includes('license') || nameLower.includes('licence')) return '🪪';
-  if (nameLower.includes('form')) return '📋';
-  if (nameLower.includes('letter')) return '✉️';
+  if (nameLower.includes('contract') || nameLower.includes('agreement')) return '<div class="file-icon contract-icon"></div>';
+  if (nameLower.includes('rental') || nameLower.includes('lease')) return '<div class="file-icon rental-icon"></div>';
+  if (nameLower.includes('employment') || nameLower.includes('employee')) return '<div class="file-icon employment-icon"></div>';
+  if (nameLower.includes('clause')) return '<div class="file-icon clause-icon"></div>';
+  if (nameLower.includes('note') || nameLower.includes('memo')) return '<div class="file-icon note-icon"></div>';
+  if (nameLower.includes('practice')) return '<div class="file-icon practice-icon"></div>';
+  if (nameLower.includes('template')) return '<div class="file-icon document-icon"></div>';
+  if (nameLower.includes('invoice') || nameLower.includes('bill')) return '<div class="file-icon invoice-icon"></div>';
+  if (nameLower.includes('receipt')) return '<div class="file-icon receipt-icon"></div>';
+  if (nameLower.includes('report')) return '<div class="file-icon report-icon"></div>';
+  if (nameLower.includes('certificate') || nameLower.includes('cert')) return '<div class="file-icon certificate-icon"></div>';
+  if (nameLower.includes('license') || nameLower.includes('licence')) return '<div class="file-icon license-icon"></div>';
+  if (nameLower.includes('form')) return '<div class="file-icon form-icon"></div>';
+  if (nameLower.includes('letter')) return '<div class="file-icon letter-icon"></div>';
   
   // Then check MIME type
-  if (!mimeType) return '📄';
+  if (!mimeType) return '<div class="file-icon document-icon"></div>';
   
-  if (mimeType.includes('pdf')) return '📕';
-  if (mimeType.includes('msword') || mimeType.includes('wordprocessingml')) return '📘';
-  if (mimeType.includes('document')) return '📄';
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊';
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📽️';
-  if (mimeType.includes('image')) return '🖼️';
-  if (mimeType.includes('video')) return '🎥';
-  if (mimeType.includes('audio')) return '🎵';
-  if (mimeType.includes('text')) return '📄';
-  if (mimeType.includes('folder')) return '📁';
+  if (mimeType.includes('pdf')) return '<div class="file-icon pdf-icon"></div>';
+  if (mimeType.includes('msword') || mimeType.includes('wordprocessingml')) return '<div class="file-icon word-icon"></div>';
+  if (mimeType.includes('document')) return '<div class="file-icon document-icon"></div>';
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '<div class="file-icon spreadsheet-icon"></div>';
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '<div class="file-icon presentation-icon"></div>';
+  if (mimeType.includes('image')) return '<div class="file-icon image-icon"></div>';
+  if (mimeType.includes('video')) return '<div class="file-icon video-icon"></div>';
+  if (mimeType.includes('audio')) return '<div class="file-icon audio-icon"></div>';
+  if (mimeType.includes('text')) return '<div class="file-icon text-icon"></div>';
+  if (mimeType.includes('folder')) return '<div class="file-icon folder-icon"></div>';
   
-  return '📄';
+  return '<div class="file-icon document-icon"></div>';
 }
 
 // Theme functions

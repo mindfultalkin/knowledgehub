@@ -1,7 +1,7 @@
 // modules/views.js - View Rendering
 console.log('Loading views.js...');
 
-// 🔥 ADD THIS EXACTLY HERE - Line 3
+// ADD THIS EXACTLY HERE - Line 3
 window.debounce = window.debounce || function(func, wait) {
   let timeout;
   return function(...args) {
@@ -37,7 +37,7 @@ function renderDashboard() {
     }).length
   };
   
-  // 🔥 TAG CLOUD DATA
+  // TAG CLOUD DATA
   const allTags = {};
   window.appState.files.forEach(file => {
     (file.aiTags || []).forEach(tag => {
@@ -51,14 +51,14 @@ function renderDashboard() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">📊 Knowledge Hub Dashboard</h1>
+        <h1 class="view-title">Knowledge Hub Dashboard</h1>
         <p class="view-subtitle">Your Google Drive Connection</p>
       </div>
       
       ${!window.appState.authenticated ? `
         <div class="auth-container">
           <div class="auth-card">
-            <h2>🔐 Connect to Your Google Drive</h2>
+            <h2>Connect to Your Google Drive</h2>
             <p>Click the button below to securely connect your Google Drive account.</p>
             <button class="connect-button" onclick="window.initiateGoogleAuth()">
               Connect to Google Drive
@@ -69,22 +69,22 @@ function renderDashboard() {
         <!-- Stats Grid -->
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-icon">📁</div>
+            <div class="stat-icon file-icon"></div>
             <div class="stat-number">${stats.totalFiles}</div>
             <div class="stat-label">Total Files</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">📜</div>
+            <div class="stat-icon contract-icon"></div>
             <div class="stat-number">${stats.contracts}</div>
             <div class="stat-label">Contracts</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">📋</div>
+            <div class="stat-icon clause-icon"></div>
             <div class="stat-number">${stats.clauses}</div>
             <div class="stat-label">Clauses</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">⚖️</div>
+            <div class="stat-icon practice-icon"></div>
             <div class="stat-number">${stats.practiceNotes}</div>
             <div class="stat-label">Practice Notes</div>
           </div>
@@ -93,30 +93,27 @@ function renderDashboard() {
         <!-- Google Drive Connection -->
         ${window.appState.driveInfo ? `
           <div class="card mb-lg">
-            <h2 class="card-title">☁️ Google Drive Connection</h2>
+            <h2 class="card-title">Google Drive Connection</h2>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: center;">
               <div><strong>Account:</strong> ${window.appState.driveInfo.user?.email || 'Connected'}</div>
-              <div><strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span></div>
+              <div><strong>Status:</strong> <span style="color: #4caf50;">Connected</span></div>
               <div><strong>Total Files:</strong> ${stats.totalFiles}</div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="action-button" onclick="window.refreshFiles()">🔄 Refresh</button>
-                <button class="action-button" onclick="window.uploadFiles()">📤 Upload</button>
-                <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Record">🎤</button>
-                <button class="action-button" onclick="window.openNoteModal()">📝 Note</button>
+                <button class="action-button" onclick="window.refreshFiles()">Refresh</button>
+                <button class="action-button" onclick="window.uploadFiles()">Upload</button>
+                <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Record">Voice</button>
+                <button class="action-button" onclick="window.openNoteModal()">Note</button>
               </div>
             </div>
           </div>
         ` : ''}
 
-        <!-- 🔥 PROFESSIONAL TAG CLOUD -->
+        <!-- PROFESSIONAL TAG CLOUD -->
         ${sortedTags.length > 0 ? `
           <div class="card mb-lg">
             <h2 class="card-title" style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
-              <i class="fas fa-tags" style="color: var(--primary-color);"></i>
+              <div class="tags-icon"></div>
               Top Tags
-              <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">
-                (${sortedTags.length} total)
-              </span>
             </h2>
             <div class="tag-cloud-dashboard">
               ${sortedTags.map(([tag, count]) => `
@@ -131,10 +128,9 @@ function renderDashboard() {
           </div>
         ` : ''}
 
-
         <!-- 4 Recent Files -->
         <div class="recent-files-section">
-          <h2 class="view-title">📌 Recent Files (4)</h2>
+          <h2 class="view-title">Recent Files (4)</h2>
           ${window.appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : `
             <div class="files-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
               ${window.appState.files.slice(0, 4).map(file => window.renderFileCard(file)).join('')}
@@ -142,7 +138,7 @@ function renderDashboard() {
             ${window.appState.files.length > 4 ? `
               <div style="text-align: center; margin-top: 1.5rem;">
                 <button class="action-button" onclick="window.navigateTo('files')" style="background: var(--primary-color);">
-                  📁 View All Files (${window.appState.files.length})
+                  View All Files (${window.appState.files.length})
                 </button>
               </div>
             ` : ''}
@@ -153,13 +149,12 @@ function renderDashboard() {
   `;
 }
 
-
 // Render search view
 function renderSearch() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">🔍 Search Your Documents</h1>
+        <h1 class="view-title">Search Your Documents</h1>
         <p class="view-subtitle">Choose your search method</p>
       </div>
       
@@ -185,20 +180,20 @@ function renderSearch() {
           <div style="display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap;">
             <button class="search-type-button ${window.appState.searchType === 'simple' ? 'active' : ''}" 
                     onclick="window.setSearchType('simple')">
-              🔍 Exact Match
+              Exact Match
             </button>
             <button class="search-type-button ${window.appState.searchType === 'ai' ? 'active' : ''}" 
                     onclick="window.setSearchType('ai')">
-              🤖 AI Semantic
+              AI Semantic
             </button>
             <button class="action-button" onclick="window.trainNLPModel()" 
                     style="margin-left: auto; background: linear-gradient(135deg, #667eea, #764ba2);">
-              🚀 Train AI Model
+              Train AI Model
             </button>
           </div>
           
           <div style="margin: 12px 0; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
-            <strong>${window.appState.searchType === 'simple' ? '🔍 Exact Match Search:' : '🤖 AI Semantic Search:'}</strong>
+            <strong>${window.appState.searchType === 'simple' ? 'Exact Match Search:' : 'AI Semantic Search:'}</strong>
             <span style="color: var(--text-secondary);">
               ${window.appState.searchType === 'simple' 
                 ? 'Finds documents containing ALL your exact words' 
@@ -208,10 +203,10 @@ function renderSearch() {
           
           ${window.appState.searchType === 'ai' ? `
             <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-              <button class="suggestion-tag" onclick="window.searchWithAI('rental agreement')">🏠 Rental Agreement</button>
-              <button class="suggestion-tag" onclick="window.searchWithAI('employment contract')">👔 Employment Contract</button>
-              <button class="suggestion-tag" onclick="window.searchWithAI('payment terms')">💰 Payment Terms</button>
-              <button class="suggestion-tag" onclick="window.searchWithAI('confidentiality clause')">🔒 Confidentiality</button>
+              <button class="suggestion-tag" onclick="window.searchWithAI('rental agreement')">Rental Agreement</button>
+              <button class="suggestion-tag" onclick="window.searchWithAI('employment contract')">Employment Contract</button>
+              <button class="suggestion-tag" onclick="window.searchWithAI('payment terms')">Payment Terms</button>
+              <button class="suggestion-tag" onclick="window.searchWithAI('confidentiality clause')">Confidentiality</button>
             </div>
           ` : ''}
         </div>
@@ -225,7 +220,7 @@ function renderSearch() {
 // Render files view
 // Render files view - WITH LIST/GRID TOGGLE
 function renderFiles() {
-  // 🔥 SORT TAGGED FILES FIRST
+  // SORT TAGGED FILES FIRST
   const sortedFiles = [...window.appState.files].sort((a, b) => {
     const aHasTags = (a.aiTags?.length > 0 || a.tagCount > 0) ? 0 : 1;
     const bHasTags = (b.aiTags?.length > 0 || b.tagCount > 0) ? 0 : 1;
@@ -235,8 +230,7 @@ function renderFiles() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">📁 All Files</h1>
-        <p class="view-subtitle">Tagged files first ✓</p>
+        <h1 class="view-title">All Files</h1>
       </div>
       
       ${!window.appState.authenticated ? `
@@ -249,20 +243,20 @@ function renderFiles() {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <div>
             <span id="filesCount" style="font-weight: 600; color: var(--primary-color);">
-              ${sortedFiles.length} files (Tagged first)
+              ${sortedFiles.length} files 
             </span>
           </div>
           <div style="display: flex; gap: 8px;">
             <button class="action-button ${window.appState.filesView === 'grid' ? 'active-view-btn' : ''}" 
                     onclick="window.toggleFilesView('grid')" title="Grid View">
-              🗂️ Grid
+              Grid View
             </button>
             <button class="action-button ${window.appState.filesView === 'list' ? 'active-view-btn' : ''}" 
                     onclick="window.toggleFilesView('list')" title="List View">
-              📋 List
+              List View
             </button>
             <button class="action-button" onclick="window.refreshFiles()" style="background: var(--accent-color);">
-              🔄 Refresh
+              Refresh
             </button>
           </div>
         </div>
@@ -278,10 +272,10 @@ function renderFiles() {
         ${window.appState.filesView === 'list' ? `
           <div class="files-list-container" id="filesList">
             <div class="files-list-header">
-              <span style="flex: 3; font-weight: 600;">📄 File Name</span>
-              <span style="flex: 1; font-weight: 600; text-align: center;">🏷️ Tags</span>
-              <span style="flex: 1; font-weight: 600; text-align: center;">📅 Modified</span>
-              <span style="flex: 1; font-weight: 600; text-align: right;">💾 Size</span>
+              <span style="flex: 3; font-weight: 600;">File Name</span>
+              <span style="flex: 1; font-weight: 600; text-align: center;">Tags</span>
+              <span style="flex: 1; font-weight: 600; text-align: center;">Modified</span>
+              <span style="flex: 1; font-weight: 600; text-align: right;">Size</span>
             </div>
             <div class="files-list-body">
               ${sortedFiles.map(file => window.renderFileListRow(file)).join('')}
@@ -292,7 +286,7 @@ function renderFiles() {
         ${window.appState.files.length > (window.appState.filesPerPage || 24) ? `
           <div style="text-align: center; margin-top: 24px;">
             <p style="color: var(--text-secondary);">
-              Showing ${sortedFiles.length} of ${window.appState.files.length} files (Tagged first)
+              Showing ${sortedFiles.length} of ${window.appState.files.length} files 
             </p>
           </div>
         ` : ''}
@@ -302,9 +296,10 @@ function renderFiles() {
 }
 
 // NEW: List row renderer
+
 function renderFileListRow(file) {
   const allTags = file.aiTags || [];
-  const tagPreview = allTags.slice(0, 2).join(', ') + (allTags.length > 2 ? '...' : '');
+  const tagCount = file.tagCount || allTags.length;  // ✅ Use accurate count from API
   
   return `
     <div class="file-list-row" data-file-id="${file.id}">
@@ -312,23 +307,25 @@ function renderFileListRow(file) {
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="font-size: 1.5rem;">${window.getFileIcon(file.mimeType, file.name)}</div>
           <div>
-            <div style="font-weight: 600; margin-bottom: 2px;">${file.name}</div>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);">${file.owner}</div>
+            <div style="font-weight: 600; margin-bottom: 2px;">${window.escapeHtml(file.name)}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">${file.owner || 'Unknown'}</div>
           </div>
         </div>
       </div>
       <div class="file-list-cell tags-cell" style="flex: 1; text-align: center;">
         ${allTags.length ? 
-          allTags.slice(0, 3).map(tag => `<span class="tag" style="font-size: 0.75rem;">${tag}</span>`).join(' ') +
-          (allTags.length > 3 ? `<span>+${allTags.length-3}</span>` : '')
-          : 'No tags'
+          allTags.slice(0, 3).map(tag => 
+            `<span class="tag" style="font-size: 0.75rem; background: var(--tag-bg); padding: 2px 6px; border-radius: 4px;">${window.escapeHtml(tag)}</span>`
+          ).join(' ') +
+          (tagCount > 3 ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">+${tagCount-3}</span>` : '')
+          : '<span style="font-size: 0.75rem; color: var(--text-secondary);">No tags</span>'
         }
       </div>
       <div class="file-list-cell date-cell" style="flex: 1; text-align: center;">
-        ${window.formatDate(file.modifiedTime)}
+        ${window.formatDate(file.modifiedTime) || 'Unknown'}
       </div>
       <div class="file-list-cell size-cell" style="flex: 1; text-align: right;">
-        ${window.formatFileSize(file.size)}
+        ${window.formatFileSize(file.size) || 'Unknown'}
       </div>
     </div>
   `;
@@ -341,7 +338,7 @@ function renderTemplates() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">📄 Template Library</h1>
+        <h1 class="view-title">Template Library</h1>
         <p class="view-subtitle">All tagged templates + practice areas</p>
       </div>
       
@@ -358,14 +355,14 @@ function renderTemplates() {
           <div style="display: flex; gap: 8px;">
             <button class="action-button ${window.appState.filesView === 'grid' ? 'active-view-btn' : ''}" 
                     onclick="window.toggleTemplatesView('grid')" title="Grid View">
-              🗂️ Grid
+              Grid View
             </button>
             <button class="action-button ${window.appState.filesView === 'list' ? 'active-view-btn' : ''}" 
                     onclick="window.toggleTemplatesView('list')" title="List View">
-              📋 List
+              List View
             </button>
             <button class="action-button" onclick="window.loadTemplates()" style="background: var(--accent-color);">
-              🔄 Refresh
+              Refresh
             </button>
           </div>
         </div>
@@ -375,7 +372,7 @@ function renderTemplates() {
           <div style="display: flex; gap: 16px; align-items: end; max-width: 800px;">
             <!-- Search - Left, wider -->
             <div style="flex: 2; min-width: 300px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">🔍 Search Templates</label>
+              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Search Templates</label>
               <input type="text" id="templateSearch" placeholder="employment, NDA, service agreement..." 
                      style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
                      oninput="window.loadTemplatesDebounced()">
@@ -383,7 +380,7 @@ function renderTemplates() {
             
             <!-- Practice Area - Right, compact -->
             <div style="flex: 1; min-width: 220px; max-width: 280px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">📋 Practice Area</label>
+              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Practice Area</label>
               <select id="practiceAreaFilter" 
                       style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
                       onchange="window.loadTemplates()">
@@ -404,9 +401,6 @@ function renderTemplates() {
   `;
 }
 
-
-
-
 window.loadTemplates = async function() {
   try {
     const contentContainer = document.getElementById('templatesContent');
@@ -414,7 +408,7 @@ window.loadTemplates = async function() {
     
     contentContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading...</p></div>';
 
-    // ✅ GET FILTER VALUES
+    // GET FILTER VALUES
     const searchInput = document.getElementById('templateSearch');
     const practiceSelect = document.getElementById('practiceAreaFilter');
     
@@ -423,7 +417,7 @@ window.loadTemplates = async function() {
 
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (practiceArea) params.set('practice_area', practiceArea);  // ✅ Backend expects 'practice_area'
+    if (practiceArea) params.set('practice_area', practiceArea);  // Backend expects 'practice_area'
 
     const response = await fetch(`${window.API_BASE_URL}/templates?${params}`);
     const data = await response.json();
@@ -446,10 +440,10 @@ window.loadTemplates = async function() {
         contentContainer.innerHTML = `
           <div class="files-list-container" id="templatesList">
             <div class="files-list-header">
-              <span style="flex: 3; font-weight: 600;">📄 Template Name</span>
-              <span style="flex: 1; font-weight: 600; text-align: center;">🏷️ Tags</span>
-              <span style="flex: 1; font-weight: 600; text-align: center;">📅 Modified</span>
-              <span style="flex: 1; font-weight: 600; text-align: right;">💾 Size</span>
+              <span style="flex: 3; font-weight: 600;">Template Name</span>
+              <span style="flex: 1; font-weight: 600; text-align: center;">Tags</span>
+              <span style="flex: 1; font-weight: 600; text-align: center;">Modified</span>
+              <span style="flex: 1; font-weight: 600; text-align: right;">Size</span>
             </div>
             <div class="files-list-body">
               ${data.templates.map(file => window.renderFileListRow(file)).join('')}
@@ -461,12 +455,12 @@ window.loadTemplates = async function() {
         }, 100);
       }
       
-      // ✅ UPDATE COUNTER
+      // UPDATE COUNTER
       if (countEl) {
         countEl.textContent = `${data.total || data.templates.length} templates`;
       }
       
-      // ✅ RE-POPULATE DROPDOWN (preserves selection)
+      // RE-POPULATE DROPDOWN (preserves selection)
       if (practiceSelect && data.practice_areas && Array.isArray(data.practice_areas)) {
         const currentValue = practiceSelect.value;
         practiceSelect.innerHTML = `
@@ -479,7 +473,7 @@ window.loadTemplates = async function() {
     } else {
       contentContainer.innerHTML = `
         <div class="empty-state">
-          <div style="font-size: 4rem;">📄</div>
+          <div class="document-icon"></div>
           <h3>No templates match filters</h3>
           <p>Try different search or practice area</p>
         </div>
@@ -492,7 +486,7 @@ window.loadTemplates = async function() {
     if (contentContainer) {
       contentContainer.innerHTML = `
         <div class="empty-state" style="color: #f44336;">
-          <div style="font-size: 4rem;">⚠️</div>
+          <div class="warning-icon"></div>
           <h3>Failed to load templates</h3>
           <p>Check: ${error.message}</p>
         </div>
@@ -501,11 +495,8 @@ window.loadTemplates = async function() {
   }
 };
 
-
-// 🔥 ADD THIS EXACTLY AFTER renderTemplates() function
+// ADD THIS EXACTLY AFTER renderTemplates() function
 window.loadTemplatesDebounced = window.debounce(window.loadTemplates, 300);
-
-
 
 // Render AI tags view
 function renderAITags() {
@@ -520,7 +511,7 @@ function renderAITags() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">🏷️ AI Tags</h1>
+        <h1 class="view-title">AI Tags</h1>
         <p class="view-subtitle">Auto-generated content tags</p>
       </div>
       
@@ -546,7 +537,7 @@ function renderAITags() {
         </div>
         
         <div class="card">
-          <h2 class="card-title">📊 Tag Statistics</h2>
+          <h2 class="card-title">Tag Statistics</h2>
           <div style="display: grid; gap: 12px;">
             ${sortedTags.slice(0, 10).map(([tag, count]) => `
               <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
@@ -558,7 +549,7 @@ function renderAITags() {
         </div>
       ` : `
         <div class="empty-state">
-          <div class="empty-state-icon">🏷️</div>
+          <div class="empty-state-icon"></div>
           <h3>No tags generated yet</h3>
           <p>Load some files first</p>
         </div>
@@ -572,7 +563,7 @@ function renderSettings() {
   return `
     <div class="view-container">
       <div class="view-header">
-        <h1 class="view-title">⚙️ Settings</h1>
+        <h1 class="view-title">Settings</h1>
         <p class="view-subtitle">Configure your preferences</p>
       </div>
       
@@ -580,17 +571,17 @@ function renderSettings() {
         <h2 class="card-title">Google Drive Connection</h2>
         ${window.appState.authenticated ? `
           <div style="display: grid; gap: 16px;">
-            <div><strong>Status:</strong> <span style="color: #4caf50;">✓ Connected</span></div>
+            <div><strong>Status:</strong> <span style="color: #4caf50;">Connected</span></div>
             ${window.appState.driveInfo?.user ? `
               <div><strong>Account:</strong> ${window.appState.driveInfo.user.email}</div>
               <div><strong>Display Name:</strong> ${window.appState.driveInfo.user.displayName || 'Not available'}</div>
             ` : ''}
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
               <button class="search-button" onclick="window.initiateGoogleAuth()" style="width: fit-content;">
-                🔄 Reconnect Drive
+                Reconnect Drive
               </button>
               <button class="logout-button" onclick="window.logoutUser()" style="width: fit-content;">
-                🚪 Logout
+                Logout
               </button>
             </div>
           </div>
@@ -605,7 +596,7 @@ function renderSettings() {
       </div>
       
       <div class="card mb-lg">
-        <h2 class="card-title">🎨 Appearance</h2>
+        <h2 class="card-title">Appearance</h2>
         <div style="display: grid; gap: 16px;">
           <div class="filter-group">
             <label class="filter-label">Theme</label>
@@ -614,13 +605,13 @@ function renderSettings() {
                 class="theme-button ${window.appState.theme === 'light' ? 'active' : ''}" 
                 onclick="window.toggleTheme()"
               >
-                ☀️ ${window.appState.theme === 'light' ? 'Light Mode (Active)' : 'Switch to Light'}
+                ${window.appState.theme === 'light' ? 'Light Mode (Active)' : 'Switch to Light'}
               </button>
               <button 
                 class="theme-button ${window.appState.theme === 'dark' ? 'active' : ''}" 
                 onclick="window.toggleTheme()"
               >
-                🌙 ${window.appState.theme === 'dark' ? 'Dark Mode (Active)' : 'Switch to Dark'}
+                ${window.appState.theme === 'dark' ? 'Dark Mode (Active)' : 'Switch to Dark'}
               </button>
             </div>
           </div>
@@ -637,22 +628,22 @@ function renderSettings() {
       </div>
       
       <div class="card mb-lg">
-        <h2 class="card-title">📄 Display Settings</h2>
+        <h2 class="card-title">Display Settings</h2>
         <div style="display: grid; gap: 16px;">
           <div class="filter-group">
             <label class="filter-label">Files per page</label>
             <select class="filter-select" onchange="window.changeFilesPerPage(event.target.value)">
               <option value="12" ${window.appState.filesPerPage === 12 ? 'selected' : ''}>12</option>
-              <option value="24" ${window.appState.filesPerPage === 24 ? 'selected' : ''}>24 (Default)</option>
+              <option value="24" ${window.appState.filesPerPage === 24 ? 'selected' : ''}>24</option>
               <option value="48" ${window.appState.filesPerPage === 48 ? 'selected' : ''}>48</option>
-              <option value="96" ${window.appState.filesPerPage === 96 ? 'selected' : ''}>96</option>
+              <option value="96" ${window.appState.filesPerPage === 96 ? 'selected' : ''}>96(Default)</option>
             </select>
           </div>
         </div>
       </div>
       
       <div class="card">
-        <h2 class="card-title">🏷️ About Tagging</h2>
+        <h2 class="card-title">About Tagging</h2>
         <p>Tags are automatically generated from:</p>
         <ul style="margin-top: 12px; margin-left: 20px;">
           <li>File names</li>
@@ -666,13 +657,13 @@ function renderSettings() {
     </div>
   `;
 }
+
 // Auto-load on filter change
 document.addEventListener('change', function(e) {
   if (e.target.id === 'practiceAreaFilter' || e.target.id === 'subPracticeFilter' || e.target.id === 'templateSearch') {
     window.loadTemplates();
   }
 });
-
 
 // Make functions globally available
 window.renderDashboard = renderDashboard;

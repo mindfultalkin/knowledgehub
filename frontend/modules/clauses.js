@@ -3,7 +3,7 @@ console.log('Loading clauses.js...');
 
 // Show Clause Library view
 async function showClauseLibrary() {
-  console.log('📋 Loading Clause Library...');
+  console.log('Loading Clause Library...');
   
   // Check if user is authenticated
   if (!window.appState.authenticated) {
@@ -14,22 +14,22 @@ async function showClauseLibrary() {
       mainContent.innerHTML = `
         <div class="view-container">
           <div class="view-header">
-            <h1 class="view-title">📋 Clause Library</h1>
+            <h1 class="view-title">Clause Library</h1>
             <p class="view-subtitle">Browse and manage your saved clauses</p>
           </div>
           
           <div class="auth-container">
             <div class="auth-card">
-              <h2>🔐 Authentication Required</h2>
+              <h2>Authentication Required</h2>
               <p>Please connect to Google Drive to access your personal clause library.</p>
               <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 1rem;">
                 Your clause library is private and only accessible when you're logged in.
               </p>
               <button class="connect-button" onclick="window.initiateGoogleAuth()" style="margin-top: 2rem;">
-                🔗 Connect to Google Drive
+                Connect to Google Drive
               </button>
               <button class="btn-secondary" onclick="window.navigateTo('dashboard')" style="margin-top: 1rem;">
-                ← Back to Dashboard
+                Back to Dashboard
               </button>
             </div>
           </div>
@@ -46,7 +46,7 @@ async function showClauseLibrary() {
   const content = `
       <div class="view-container">
           <div class="view-header">
-              <h1 class="view-title">📋 Clause Library</h1>
+              <h1 class="view-title">Clause Library</h1>
               <p class="view-subtitle">Browse and manage your saved clauses</p>
           </div>
           
@@ -56,7 +56,7 @@ async function showClauseLibrary() {
                       type="text" 
                       id="clauseSearchInput" 
                       class="search-input" 
-                      placeholder="🔍 Search clauses by title..."
+                      placeholder="Search clauses by title..."
                       onkeyup="window.filterClauses()"
                   >
               </div>
@@ -87,63 +87,107 @@ async function loadClauseLibrary() {
       const container = document.getElementById('clauseLibraryContent');
       if (container) {
         container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">🔒</div>
-                <h3>Authentication Required</h3>
-                <p>Please login to access your clause library</p>
-                <button onclick="window.initiateGoogleAuth()" class="btn-primary" style="margin-top: 1rem;">
-                    Connect to Google Drive
-                </button>
-            </div>
+          <div class="empty-state">
+            <div class="empty-state-icon"></div>
+            <h3>Authentication Required</h3>
+            <p>Please login to access your clause library</p>
+            <button onclick="window.initiateGoogleAuth()" class="btn-primary" style="margin-top: 1rem;">
+                Connect to Google Drive
+            </button>
+          </div>
         `;
       }
       return;
     }
+
+    // ✅ TRY MULTIPLE WAYS TO GET USER EMAIL
+    let userEmail = window.appState.userEmail || 
+                   localStorage.getItem('googleUserEmail') ||
+                   window.appState.user?.email ||
+                   window.appState.email;
+
+    // ✅ FALLBACK: Get from Google Drive API
+    if (!userEmail) {
+      try {
+        const response = await fetch(`${window.API_BASE_URL}/auth/account-info`);
+        const data = await response.json();
+        if (data.authenticated && data.email) {
+          userEmail = data.email;
+          // Save for future use
+          window.appState.userEmail = userEmail;
+          localStorage.setItem('googleUserEmail', userEmail);
+        }
+      } catch (apiError) {
+        console.warn('Could not fetch user email from API:', apiError);
+      }
+    }
+
+    // ✅ FINAL CHECK
+    if (!userEmail) {
+      console.warn('No user email available - showing public library');
+      userEmail = 'public';  // Fallback - shows all or empty
+    }
+
+    console.log('🔍 Loading clause library for:', userEmail);
     
-    console.log('Loading clause library for authenticated user...');
-    const response = await fetch(`${window.API_BASE_URL}/clauses/library`);
+    // ✅ SEND EMAIL AS QUERY PARAM
+    const url = `${window.API_BASE_URL}/clauses/library?user_email=${encodeURIComponent(userEmail)}`;
+    console.log('📡 Fetching:', url);
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
+      console.error('Response status:', response.status);
       if (response.status === 401 || response.status === 403) {
         throw new Error('Authentication failed. Please login again.');
       }
-      throw new Error('Failed to load clause library');
+      if (response.status === 400) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Invalid request');
+      }
+      if (response.status === 404) {
+        console.log('No clauses found for this user');
+      }
+      throw new Error(`Server error: ${response.status}`);
     }
     
     const data = await response.json();
-    console.log(`📚 Loaded ${data.count} clauses from library`);
+    console.log(`✅ Loaded ${data.count || 0} clauses for ${userEmail}`);
     
-    displayClauseLibrary(data.clauses);
+    displayClauseLibrary(data.clauses || []);
     
   } catch (error) {
-    console.error('Error loading clause library:', error);
+    console.error('❌ Error loading clause library:', error);
     const container = document.getElementById('clauseLibraryContent');
     if (container) {
-      if (error.message.includes('Authentication')) {
+      if (error.message.includes('Authentication') || error.message.includes('email')) {
         container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">🔒</div>
-                <h3>Authentication Error</h3>
-                <p>${error.message}</p>
-                <button onclick="window.initiateGoogleAuth()" class="btn-primary" style="margin-top: 1rem;">
-                    Reconnect to Google Drive
-                </button>
-            </div>
+          <div class="empty-state">
+            <div class="empty-state-icon"></div>
+            <h3>Setup Required</h3>
+            <p>${error.message}</p>
+            <button onclick="window.initiateGoogleAuth()" class="btn-primary" style="margin-top: 1rem;">
+                🔗 Connect Google Drive
+            </button>
+          </div>
         `;
       } else {
         container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">❌</div>
-                <p>Failed to load clause library</p>
-                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem;">
-                  ${error.message}
-                </p>
-            </div>
+          <div class="empty-state">
+            <div class="empty-state-icon"></div>
+            <h3>No Clauses Found</h3>
+            <p>Your personal clause library is empty. Extract clauses from documents to get started!</p>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 1rem;">
+              ${error.message}
+            </p>
+          </div>
         `;
       }
     }
   }
 }
+
+
 
 // Display clause library
 function displayClauseLibrary(clauses) {
@@ -153,11 +197,11 @@ function displayClauseLibrary(clauses) {
   if (!clauses || clauses.length === 0) {
     container.innerHTML = `
         <div class="empty-state">
-            <div class="empty-state-icon">📋</div>
+            <div class="empty-state-icon"></div>
             <h3>No clauses saved yet</h3>
             <p>Extract clauses from documents and save them to build your library</p>
             <div style="margin-top: 1.5rem; color: var(--text-secondary); font-size: 0.9rem;">
-              <p>📝 <strong>How to add clauses:</strong></p>
+              <p><strong>How to add clauses:</strong></p>
               <ol style="text-align: left; margin: 0.5rem 0 0 1.5rem;">
                 <li>Connect to Google Drive</li>
                 <li>Browse your files</li>
@@ -194,7 +238,7 @@ function displayClauseLibrary(clauses) {
           </div>
           
           <button class="btn-view-files" onclick="window.viewClauseFiles(${clause.id}, event)">
-              📄 View Files with this Clause
+              View Files with this Clause
           </button>
       </div>
   `).join('');
@@ -204,7 +248,7 @@ function displayClauseLibrary(clauses) {
           ${clauseCards}
       </div>
       <div style="text-align: center; margin-top: 2rem; color: var(--text-secondary); font-size: 0.9rem;">
-        <p>📚 Showing ${clauses.length} clauses from your Google Drive</p>
+        <p>Showing ${clauses.length} clauses from your Google Drive</p>
       </div>
   `;
 }
@@ -218,15 +262,15 @@ async function viewClauseFiles(clauseId, event) {
   
   // Check authentication
   if (!window.appState.authenticated) {
-    window.showNotification('🔒 Please login to view clause files', 'error');
+    window.showNotification('Please login to view clause files', 'error');
     return;
   }
   
-  console.log(`🔍 Loading files for clause ID: ${clauseId}`);
+  console.log(`Loading files for clause ID: ${clauseId}`);
   
   try {
     const url = `${window.API_BASE_URL}/clauses/library/${clauseId}/files`;
-    console.log(`📡 Fetching from: ${url}`);
+    console.log(`Fetching from: ${url}`);
     
     const response = await fetch(url);
     
@@ -238,7 +282,7 @@ async function viewClauseFiles(clauseId, event) {
     }
     
     const data = await response.json();
-    console.log(`✅ Found ${data.files ? data.files.length : 0} files`);
+    console.log(`Found ${data.files ? data.files.length : 0} files`);
     
     showClauseFilesModal(data);
     
@@ -246,7 +290,7 @@ async function viewClauseFiles(clauseId, event) {
     console.error('Error loading clause files:', error);
     
     if (error.message.includes('Authentication')) {
-      window.showNotification('🔒 Authentication required', 'error');
+      window.showNotification('Authentication required', 'error');
       setTimeout(() => {
         window.initiateGoogleAuth();
       }, 1500);
@@ -257,8 +301,8 @@ async function viewClauseFiles(clauseId, event) {
 }
 
 // Show clause files modal
-// 🔥 PREMIUM "Files with this Clause" Modal
-// 🔥 FIXED: Scrollable Modal - Shows ALL Files + Badge Only
+// PREMIUM "Files with this Clause" Modal
+// FIXED: Scrollable Modal - Shows ALL Files + Badge Only
 function showClauseFilesModal(data) {
   const modal = document.createElement('div');
   modal.className = 'modal';
@@ -269,7 +313,7 @@ function showClauseFilesModal(data) {
     data.files.map((file, index) => {
       const matchType = file.match_type || 'similar';
       const badgeClass = matchType === 'exact' ? 'badge-exact' : 'badge-similar';
-      const icon = window.getFileIcon ? window.getFileIcon(file.mimeType, file.title) : '📄';
+      const icon = window.getFileIcon ? window.getFileIcon(file.mimeType, file.title) : '';
       
       return `
         <div class="clause-file-item ${matchType}" onclick="window.viewFile('${file.id}')" title="Open ${file.title}">
@@ -288,7 +332,7 @@ function showClauseFilesModal(data) {
       `;
     }).join('') : `
       <div class="empty-state" style="grid-column: 1/-1; text-align: center; padding: 3rem;">
-        <i class="fas fa-search" style="font-size: 4rem; color: var(--border-color);"></i>
+        <div class="empty-state-icon"></div>
         <h3 style="color: var(--text-primary);">No matching files</h3>
         <p style="color: var(--text-secondary);">No documents contain this clause</p>
       </div>
@@ -301,7 +345,7 @@ function showClauseFilesModal(data) {
       <div class="modal-header">
         <div>
           <h2 style="margin: 0; display: flex; align-items: center; gap: 12px;">
-            <i class="fas fa-file-contract"></i>
+            <div class="modal-icon"></div>
             ${window.escapeHtml(data.clause_title || 'Clause Files')}
           </h2>
           <p class="modal-subtitle" style="margin: 8px 0 0 0; color: var(--primary-color); font-weight: 600;">
@@ -309,7 +353,7 @@ function showClauseFilesModal(data) {
           </p>
         </div>
         <button class="close-btn" onclick="document.getElementById('clauseFilesModal')?.remove()" title="Close (Esc)">
-          <i class="fas fa-times"></i>
+          <div class="close-icon"></div>
         </button>
       </div>
       
@@ -317,7 +361,7 @@ function showClauseFilesModal(data) {
       ${data.clause_content ? `
         <div class="clause-preview" style="padding: 1.5rem; margin: 0; background: var(--bg-secondary); border-radius: 0 0 12px 12px; border-bottom: 1px solid var(--border-color);">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <i class="fas fa-quote-left" style="color: var(--primary-color); font-size: 1.4rem;"></i>
+            <div class="quote-icon"></div>
             <strong style="color: var(--primary-color);">Clause Preview:</strong>
           </div>
           <div style="color: var(--text-primary); line-height: 1.6; font-size: 0.95rem; max-height: 100px; overflow: hidden; position: relative;">
@@ -326,11 +370,11 @@ function showClauseFilesModal(data) {
         </div>
       ` : ''}
       
-      <!-- 🔥 SCROLLABLE FILES GRID - Shows ALL 7 Files -->
+      <!-- SCROLLABLE FILES GRID - Shows ALL 7 Files -->
       <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
           <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
-            <i class="fas fa-file-contract"></i> Files Containing This Clause
+            <div class="file-contract-icon"></div> Files Containing This Clause
           </h3>
           <span style="color: var(--primary-color); font-weight: 600; font-size: 1.1rem;">
             ${data.files ? data.files.length : 0} total
@@ -355,7 +399,7 @@ function showClauseFilesModal(data) {
       <div class="modal-footer" style="justify-content: flex-end; padding: 1rem 1.5rem;">
         <button onclick="document.getElementById('clauseFilesModal')?.remove()" 
                 class="btn-secondary" style="min-width: 120px;">
-          <i class="fas fa-times"></i> Close
+          <div class="times-icon"></div> Close
         </button>
       </div>
     </div>
@@ -372,8 +416,6 @@ function showClauseFilesModal(data) {
   };
   document.addEventListener('keydown', escHandler);
 }
-
-
 
 // Close clause files modal
 function closeClauseFilesModal() {

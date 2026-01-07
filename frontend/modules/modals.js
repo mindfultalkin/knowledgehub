@@ -77,7 +77,7 @@ async function autoLoadCachedClauses(fileId) {
       const data = await response.json();
       
       if (data.clauses && data.clauses.length > 0) {
-        console.log(`✅ Found ${data.clauses.length} cached clauses`);
+        console.log(`Found ${data.clauses.length} cached clauses`);
         window.currentClauses = data.clauses;
         displayClausesList(window.currentClauses);
         return;
@@ -86,9 +86,9 @@ async function autoLoadCachedClauses(fileId) {
     
     clausesList.innerHTML = `
         <div class="empty-state">
-            <p style="margin-bottom: 1rem; color: var(--text-secondary);">📄 No clauses extracted yet</p>
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">No clauses extracted yet</p>
             <button onclick="window.extractClausesNow()" class="btn-primary" style="padding: 0.75rem 1.5rem; font-size: 0.9rem;">
-                🔍 Extract Clauses Now
+                Extract Clauses Now
             </button>
         </div>
     `;
@@ -97,9 +97,9 @@ async function autoLoadCachedClauses(fileId) {
     console.error('Error loading cached clauses:', error);
     clausesList.innerHTML = `
         <div class="empty-state">
-            <p style="color: red; margin-bottom: 1rem;">❌ Error loading clauses</p>
+            <p style="color: red; margin-bottom: 1rem;">Error loading clauses</p>
             <button onclick="window.extractClausesNow()" class="btn-primary">
-                🔍 Extract Clauses
+                Extract Clauses
             </button>
         </div>
     `;
@@ -111,7 +111,7 @@ async function extractClausesNow() {
   const clausesList = document.getElementById('clausesList');
   if (!clausesList) return;
   
-  clausesList.innerHTML = '<div class="loading-state">⏳ Extracting clauses... This may take 10-30 seconds...</div>';
+  clausesList.innerHTML = '<div class="loading-state">Extracting clauses... This may take 10-30 seconds...</div>';
   
   try {
     const response = await fetch(`${window.API_BASE_URL}/documents/${window.currentDocumentId}/extract-clauses`, {
@@ -127,20 +127,20 @@ async function extractClausesNow() {
       throw new Error(data.detail || 'Failed to extract clauses');
     }
     
-    console.log(`✅ Extracted ${data.clauses.length} clauses`);
+    console.log(`Extracted ${data.clauses.length} clauses`);
     window.currentClauses = data.clauses;
     displayClausesList(window.currentClauses);
     
-    window.showNotification(`✅ Successfully extracted ${data.clauses.length} clauses!`, 'success');
+    window.showNotification(`Successfully extracted ${data.clauses.length} clauses!`, 'success');
     
   } catch (error) {
     console.error('Error extracting clauses:', error);
     clausesList.innerHTML = `
         <div class="empty-state" style="color: red;">
-            <p style="margin-bottom: 1rem;">❌ Failed to extract clauses</p>
+            <p style="margin-bottom: 1rem;">Failed to extract clauses</p>
             <p style="font-size: 0.85rem; margin-bottom: 1rem;">${error.message}</p>
             <button onclick="window.extractClausesNow()" class="btn-primary">
-                🔄 Try Again
+                Try Again
             </button>
         </div>
     `;
@@ -207,7 +207,7 @@ async function displaySelectedClause(clause) {
   
   if (!container || !titleEl || !contentEl) return;
   
-  console.log('📄 Displaying clause:', clause);
+  console.log('Displaying clause:', clause);
   
   container.style.display = 'block';
   
@@ -230,38 +230,63 @@ async function displaySelectedClause(clause) {
       const data = await response.json();
       
       if (data.saved) {
-        saveBtn.textContent = '✓ Saved to Library';
+        saveBtn.textContent = 'Saved to Library';
         saveBtn.classList.add('saved');
         saveBtn.disabled = true;
       } else {
-        saveBtn.textContent = '💾 Save to Library';
+        saveBtn.textContent = 'Save to Library';
         saveBtn.classList.remove('saved');
         saveBtn.disabled = false;
       }
     } catch (error) {
       console.error('Error checking saved status:', error);
-      saveBtn.textContent = '💾 Save to Library';
+      saveBtn.textContent = 'Save to Library';
       saveBtn.classList.remove('saved');
       saveBtn.disabled = false;
     }
   }
 }
 
-// Save clause to library
 async function saveClauseToLibrary() {
   if (!window.currentDocumentId || window.selectedClauseNumber === null) {
     alert('No clause selected');
     return;
   }
-  
+
   const saveBtn = document.getElementById('saveToLibraryBtn');
   if (!saveBtn) return;
-  
+
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
-  
+
   try {
-    const response = await fetch(`${window.API_BASE_URL}/clauses/save-to-library`, {
+    // Try to get user email from multiple sources
+    let userEmail = window.userEmail || 
+                   localStorage.getItem('user_email') || 
+                   window.appState.userEmail || 
+                   window.appState.user?.email;
+
+    if (!userEmail) {
+      // Fallback: fetch from API
+      const response = await fetch(`${window.API_BASE_URL}/auth/account-info`);
+      const data = await response.json();
+      if (data.authenticated && data.email) {
+        userEmail = data.email;
+        window.appState.userEmail = userEmail;
+        localStorage.setItem('user_email', userEmail);
+      }
+    }
+
+    if (!userEmail) {
+      alert('User email is required');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save to Library';
+      return;
+    }
+
+    // Send user_email as query parameter
+    const url = `${window.API_BASE_URL}/clauses/save-to-library?user_email=${encodeURIComponent(userEmail)}`;
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -271,37 +296,38 @@ async function saveClauseToLibrary() {
         clause_number: window.selectedClauseNumber
       })
     });
-    
+
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(data.detail || 'Failed to save clause');
     }
-    
-    saveBtn.textContent = '✓ Saved to Library';
+
+    saveBtn.textContent = 'Saved to Library';
     saveBtn.classList.add('saved');
     saveBtn.disabled = true;
-    
+
     const message = data.already_saved 
       ? 'Clause was already in library' 
       : 'Clause saved to library successfully!';
     window.showNotification(message, 'success');
-    
+
   } catch (error) {
     console.error('Error saving clause:', error);
     alert('Failed to save clause: ' + error.message);
     saveBtn.disabled = false;
-    saveBtn.textContent = '💾 Save to Library';
+    saveBtn.textContent = 'Save to Library';
     saveBtn.classList.remove('saved');
   }
 }
+
 
 // Find similar files
 async function findSimilarFiles(clauseTitle) {
   const container = document.getElementById('similarFilesContent');
   if (!container) return;
   
-  container.innerHTML = '<div class="loading-state">🔍 Searching for similar files...</div>';
+  container.innerHTML = '<div class="loading-state">Searching for similar files...</div>';
   
   console.log('Finding similar files for clause:', clauseTitle);
   
@@ -315,7 +341,7 @@ async function findSimilarFiles(clauseTitle) {
     console.log('Similar files response:', data);
     
     if (!data.found || data.count === 0) {
-      container.innerHTML = '<div class="empty-state">❌ No other files found with this clause</div>';
+      container.innerHTML = '<div class="empty-state">No other files found with this clause</div>';
       return;
     }
     
@@ -349,11 +375,11 @@ async function findSimilarFiles(clauseTitle) {
       };
     }
     
-    console.log(`✅ Displayed ${data.count} similar files`);
+    console.log(`Displayed ${data.count} similar files`);
     
   } catch (error) {
     console.error('Error finding similar files:', error);
-    container.innerHTML = '<div class="empty-state">⚠️ Error loading similar files</div>';
+    container.innerHTML = '<div class="empty-state">Error loading similar files</div>';
   }
 }
 
@@ -394,7 +420,7 @@ function showInlineComparison(mainClause, similarClause) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;">
         <div style="background:#fff;border:2px solid #4b72e0;border-radius:9px;padding:1.3rem 1.5rem;">
           <div style="font-size:1.01rem; font-weight:700; color:#356bc9;margin-bottom:5px;">
-            <span style="vertical-align:-4px;">📄</span> ${window.escapeHtml(mainClause.file_title)}
+            <span style="vertical-align:-4px;"></span> ${window.escapeHtml(mainClause.file_title)}
           </div>
           <div class="clause-title" style="font-size:1.09rem;color:#181845;font-weight:700;margin-bottom:10px;">${window.escapeHtml(mainClause.clause_title)}</div>
           <hr style="border: none; border-top: 1px solid #e6e7ea; margin:12px 0;">
@@ -404,7 +430,7 @@ function showInlineComparison(mainClause, similarClause) {
         </div>
         <div style="background:#fff;border:2px solid #28b7a5;border-radius:9px;padding:1.3rem 1.5rem;">
           <div style="font-size:1.01rem; font-weight:700; color:#179076;margin-bottom:5px;">
-            <span style="vertical-align:-4px;">📄</span> ${window.escapeHtml(similarClause.file_title)}
+            <span style="vertical-align:-4px;"></span> ${window.escapeHtml(similarClause.file_title)}
           </div>
           <div class="clause-title" style="font-size:1.09rem;color:#181845;font-weight:700;margin-bottom:10px;">${window.escapeHtml(similarClause.clause_title)}</div>
           <hr style="border: none; border-top: 1px solid #e6e7ea; margin:12px 0;">
@@ -414,7 +440,7 @@ function showInlineComparison(mainClause, similarClause) {
         </div>
       </div>
       <div style="text-align:center;margin-top:32px;">
-        <button onclick="window.clearInlineComparison()" class="btn-primary" style="background:#ff4040;border:none;">&#10006; Remove Comparison</button>
+        <button onclick="window.clearInlineComparison()" class="btn-primary" style="background:#ff4040;border:none;">Remove Comparison</button>
       </div>
     </div>
   `;
@@ -462,7 +488,7 @@ async function loadContractRiskScore(fileId) {
   try {
     const response = await fetch(`${window.API_BASE_URL}/contracts/${fileId}/risk-score`);
     if (!response.ok) {
-      window.showNotification('⚠️ Could not load risk score', 'warning');
+      window.showNotification('Could not load risk score', 'warning');
       return;
     }
     const riskData = await response.json();
@@ -485,11 +511,11 @@ function displayRiskScoreCard(riskData) {
   const level = riskData.risk_level || 'UNKNOWN';
   scoreEl.textContent = score;
 
-  let emoji = '🔴';
-  if (level === 'LOW') emoji = '🟢';
-  else if (level === 'MEDIUM') emoji = '🟡';
+  let indicator = '';
+  if (level === 'LOW') indicator = 'LOW';
+  else if (level === 'MEDIUM') indicator = 'MEDIUM';
 
-  levelEl.textContent = `${emoji} ${level}`;
+  levelEl.textContent = `${indicator} ${level}`;
   cardEl.classList.remove('medium-risk', 'high-risk');
   if (level === 'MEDIUM') cardEl.classList.add('medium-risk');
   else if (level === 'HIGH') cardEl.classList.add('high-risk');
@@ -502,17 +528,17 @@ function displayRiskBreakdown(riskData) {
   const missingList = document.getElementById('missingClausesList');
   if (goodList) {
     goodList.innerHTML = Array.isArray(riskData.good_clauses) && riskData.good_clauses.length
-      ? riskData.good_clauses.map(clause => `<li>✓ ${clause}</li>`).join('')
+      ? riskData.good_clauses.map(clause => `<li>FOUND: ${clause}</li>`).join('')
       : '<li style="color: #999;">No favorable clauses detected</li>';
   }
   if (cautionList) {
     cautionList.innerHTML = Array.isArray(riskData.caution_clauses) && riskData.caution_clauses.length
-      ? riskData.caution_clauses.map(clause => `<li>⚠️ ${clause}</li>`).join('')
+      ? riskData.caution_clauses.map(clause => `<li>CAUTION: ${clause}</li>`).join('')
       : '<li style="color: #999;">No caution items detected</li>';
   }
   if (missingList) {
     missingList.innerHTML = Array.isArray(riskData.missing_clauses) && riskData.missing_clauses.length
-      ? riskData.missing_clauses.map(clause => `<li>❌ ${clause}</li>`).join('')
+      ? riskData.missing_clauses.map(clause => `<li>MISSING: ${clause}</li>`).join('')
       : '<li style="color: #999;">No missing clauses detected</li>';
   }
 }
@@ -542,80 +568,35 @@ function toggleView(viewType) {
 
 // Tag management
 async function fetchDocumentTags(documentId) {
-  console.log(`🔍 Fetching tags for document ID: ${documentId}`);
+  console.log(`Fetching tags for document ID: ${documentId}`);
   
   try {
-    // Try primary API endpoint
     const res = await fetch(`${window.API_BASE_URL}/documents/${documentId}/tags`);
     
     if (!res.ok) {
-      console.warn(`⚠️ Primary API failed (${res.status}), trying alternatives...`);
-      
-      // Alternative 1: Try with Drive file ID
-      const file = window.appState.files.find(f => f.id === documentId);
-      if (file && file.driveId) {
-        console.log(`🔄 Trying with Drive ID: ${file.driveId}`);
-        const res2 = await fetch(`${window.API_BASE_URL}/documents/${file.driveId}/tags`);
-        if (res2.ok) {
-          const data = await res2.json();
-          console.log(`✅ Tags from Drive ID:`, data.tags);
-          return data.tags || [];
-        }
-      }
-      
-      // Alternative 2: Check if tags are already in file data
-      if (file && file.aiTags && file.aiTags.length > 0) {
-        console.log(`ℹ️ Using aiTags from file data:`, file.aiTags);
-        return file.aiTags;
-      }
-      
-      throw new Error(`All tag fetch attempts failed`);
+      throw new Error(`API failed (${res.status}): ${res.statusText}`);
     }
     
     const data = await res.json();
-    console.log(`✅ Tags API response:`, data);
+    console.log(`✅ Tags loaded successfully:`, data.tags || []);
     
-    if (!data.tags || data.tags.length === 0) {
-      console.log(`ℹ️ API returned empty tags array`);
-      
-      // Check if tags might be in different format
-      if (data.aiTags) {
-        console.log(`ℹ️ Found tags in aiTags field:`, data.aiTags);
-        return data.aiTags;
-      }
-      
-      // Try to get tags from file list
-      const file = window.appState.files.find(f => f.id === documentId || f.driveId === documentId);
-      if (file && file.aiTags && file.aiTags.length > 0) {
-        console.log(`ℹ️ Using tags from appState:`, file.aiTags);
-        return file.aiTags;
-      }
-      
-      return [];
-    }
-    
-    return data.tags;
+    return data.tags || [];
     
   } catch (error) {
     console.error('❌ Error fetching tags:', error);
     
-    // Last resort: try direct database check via API
-    try {
-      console.log(`🔄 Attempting direct check...`);
-      const testRes = await fetch(`${window.API_BASE_URL}/db/tag-check?doc_id=${documentId}`);
-      if (testRes.ok) {
-        const testData = await testRes.json();
-        console.log(`🔄 Direct check result:`, testData);
-        return testData.tags || [];
-      }
-    } catch (e) {
-      console.error('❌ Direct check also failed:', e);
+    // Graceful fallback: use file data if available
+    const file = window.appState?.files?.find(f => f.id === documentId);
+    if (file?.aiTags?.length > 0) {
+      console.log(`🔄 Using cached aiTags from file:`, file.aiTags);
+      return file.aiTags;
     }
     
-    window.showNotification('⚠️ Could not load tags', 'error');
+    window.showNotification('Could not load tags (using cached data)', 'warning');
     return [];
   }
 }
+
 async function removeTag(documentId, tag) {
   if (!confirm(`Remove tag "${tag}"?`)) return;
 
@@ -625,15 +606,35 @@ async function removeTag(documentId, tag) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tag }),
     });
+    
     if (!res.ok) throw new Error('Failed to remove tag');
+    
     const data = await res.json();
-    updateTagsDisplay(documentId, data.tags || []);
-    window.showNotification(`✅ Tag "${tag}" removed`, 'success');
+    console.log('✅ Tag removed:', data);
+    
+    // ✅ Update modal tags display
+    window.updateTagsDisplay(documentId, data.tags || []);
+    window.showNotification(`Tag "${tag}" removed`, 'success');
+    
+    // ✅ CRITICAL: Refresh the file list to update file cards
+    console.log('🔄 Refreshing file list...');
+    if (window.refreshFiles) {
+      await window.refreshFiles();
+    }
+    
+    // ✅ Update the specific file in appState
+    const fileIndex = window.appState.files.findIndex(f => f.id === documentId);
+    if (fileIndex !== -1) {
+      window.appState.files[fileIndex].aiTags = data.tags || [];
+      window.appState.files[fileIndex].tagCount = (data.tags || []).length;
+      console.log('✅ Updated file in appState:', window.appState.files[fileIndex]);
+    }
   } catch (e) {
     console.error('Remove tag error', e);
-    window.showNotification('❌ Failed to remove tag', 'error');
+    window.showNotification('Failed to remove tag', 'error');
   }
 }
+
 
 function updateTagsDisplay(documentId, tags) {
   const tagsContainer = document.getElementById('tagsContainer');
@@ -651,7 +652,7 @@ function updateTagsDisplay(documentId, tags) {
           class="btn-secondary"
           style="margin-top:12px;width:100%;text-align:center;"
         >
-          ➕ Add Tag
+          Add Tag
         </button>
       </div>
     `;
@@ -684,7 +685,7 @@ function updateTagsDisplay(documentId, tags) {
         class="btn-secondary"
         style="margin-top:12px;width:100%;text-align:center;"
       >
-        ➕ Add Tag
+        Add Tag
       </button>
     </div>
   `;
@@ -736,12 +737,12 @@ async function saveNote() {
   const content = document.getElementById('noteContent')?.value || '';
 
   if (!title) {
-    window.showNotification('⚠️ Title is required', 'error');
+    window.showNotification('Title is required', 'error');
     return;
   }
 
   try {
-    window.showNotification('📝 Creating note...', 'info');
+    window.showNotification('Creating note...', 'info');
 
     const res = await fetch(`${window.API_BASE_URL}/notes`, {
       method: 'POST',
@@ -752,17 +753,16 @@ async function saveNote() {
     if (!res.ok) throw new Error(`Failed (${res.status})`);
     await res.json();
 
-    window.showNotification('✅ Note created', 'success');
+    window.showNotification('Note created', 'success');
     window.closeNoteModal();
     if (window.refreshFiles) {
       await window.refreshFiles();
     }
   } catch (e) {
     console.error('Create note error', e);
-    window.showNotification('❌ Failed to create note', 'error');
+    window.showNotification('Failed to create note', 'error');
   }
 }
-
 
 // Add this BEFORE the window. exports at the bottom
 window.addTag = async function(documentId) {
@@ -779,15 +779,51 @@ window.addTag = async function(documentId) {
     if (response.ok) {
       const data = await response.json();
       window.updateTagsDisplay(documentId, data.tags || []);
-      window.showNotification(`✅ Added: ${tagName}`, 'success');
+      window.showNotification(`Added: ${tagName}`, 'success');
+      
+      // ✅ CRITICAL: Refresh file list to show tag in card
+      if (window.refreshFiles) {
+        setTimeout(() => window.refreshFiles(), 500);  // Small delay for DB sync
+      }
     } else {
-      window.showNotification('❌ Tag not in master list', 'error');
+      window.showNotification('Tag not in master list', 'error');
     }
   } catch (error) {
     console.error('Add tag failed:', error);
-    window.showNotification('❌ Failed to add tag', 'error');
+    window.showNotification('Failed to add tag', 'error');
   }
 };
+window.removeTag = async function(documentId, tag) {
+  if (!confirm(`Remove tag "${tag}"?`)) return;
+
+  try {
+    const res = await fetch(`${window.API_BASE_URL}/documents/${documentId}/tags/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag }),
+    });
+    
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.detail || 'Failed to remove tag');
+    }
+    
+    const data = await res.json();
+    window.updateTagsDisplay(documentId, data.tags || []);
+    window.showNotification(`Tag "${tag}" removed`, 'success');
+    
+    // ✅ CRITICAL: Refresh file list to update tag count/badges in file row
+    if (window.refreshFiles) {
+      setTimeout(() => window.refreshFiles(), 500);  // Small delay for DB sync
+    }
+    
+  } catch (e) {
+    console.error('Remove tag error:', e);
+    window.showNotification(`Failed to remove tag: ${e.message}`, 'error');
+  }
+};
+
+
 
 // Make functions globally available
 window.openDocumentModal = openDocumentModal;

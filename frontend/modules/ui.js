@@ -19,9 +19,9 @@ function renderFileCard(file) {
       <div class="file-info">
         <div class="file-name" title="${file.name}">${file.name}</div>
         <div class="file-meta">
-          <span>👤 ${file.owner}</span>
-          <span>📅 ${window.formatDate(file.modifiedTime)}</span>
-          <span>💾 ${window.formatFileSize(file.size)}</span>
+          <span>Owner: ${file.owner}</span>
+          <span>Date: ${window.formatDate(file.modifiedTime)}</span>
+          <span>Size: ${window.formatFileSize(file.size)}</span>
         </div>
         <div class="file-tags">
           ${tagPreview}
@@ -64,7 +64,6 @@ function attachFileCardListeners() {
   });
 }
 
-
 // Simple search result renderer
 function renderSimpleSearchResult(file) {
   const icon = `<div style="font-size:3.5rem;">${window.getFileIcon(file.mimeType, file.name)}</div>`;
@@ -74,14 +73,14 @@ function renderSimpleSearchResult(file) {
       <div class="file-thumbnail">
         ${icon}
         <div style="position: absolute; top: 8px; right: 8px; background: #4caf50; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.7rem;">
-          🔍 Exact Match
+          Exact Match
         </div>
       </div>
       <div class="file-info">
         <div class="file-name" title="${file.name}">${file.name}</div>
         <div class="file-meta">
-          <span>👤 ${file.owner}</span>
-          <span>📅 ${window.formatDate(file.modifiedTime)}</span>
+          <span>Owner: ${file.owner}</span>
+          <span>Date: ${window.formatDate(file.modifiedTime)}</span>
         </div>
         ${file.content_preview ? `
           <div style="margin: 8px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; background: var(--bg-tertiary); padding: 8px; border-radius: 4px;">
@@ -109,8 +108,8 @@ function renderAISearchResult(file) {
       <div class="file-info">
         <div class="file-name" title="${file.name}">${file.name}</div>
         <div class="file-meta">
-          <span>👤 ${file.owner}</span>
-          <span>📅 ${window.formatDate(file.modifiedTime)}</span>
+          <span>Owner: ${file.owner}</span>
+          <span>Date: ${window.formatDate(file.modifiedTime)}</span>
         </div>
         <div style="margin: 8px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
           ${file.snippet || 'No content preview'}

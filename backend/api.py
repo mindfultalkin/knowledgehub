@@ -288,6 +288,28 @@ async def db_health_check(db: Session = Depends(get_db)):
             "error": str(e),
             "status": "unhealthy"
         }
+    
+@router.get("/auth/account-info")
+async def get_account_info():
+    """Get current Google account email"""
+    try:
+        global drive_client  # Your global drive_client
+        if not drive_client or not drive_client.creds:
+            return {"authenticated": False}
+        
+        about = drive_client.service.about().get(fields='user').execute()
+        email = about['user']['emailAddress']
+        
+        print(f"📧 Current user: {email}")
+        return {
+            "authenticated": True,
+            "email": email,
+            "name": about['user'].get('displayName', '')
+        }
+    except Exception as e:
+        print(f"❌ Auth info error: {e}")
+        return {"authenticated": False}
+
 #==================== GOOGLE DRIVE SYNC ROUTES ====================
 
 
@@ -385,23 +407,20 @@ async def get_all_documents(
 
 @router.get("/documents/{document_id}/tags")
 async def get_document_tags(document_id: str, db: Session = Depends(get_db)):
+    """Get tags for document by any ID type (Drive ID or internal ID)"""
     try:
-        doc = _get_document_by_any_id(db, document_id)
+        doc = _get_document_by_any_id(db, document_id)  # Uses both lookup methods
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
-
-        # 1) read saved tags from metadata tables
+        
         tags = _load_tags_from_doc(doc, db)
-
-        # 2) if none yet, seed from SimpleTagger once
-        if not tags and tagger:
-            auto_tags = tagger.generate_tags(doc.title or "", doc.mime_type, None)
-            tags = auto_tags
-            _save_tags_to_doc(doc, tags, db)
-
-        return {"document_id": document_id, "tags": tags}
+        return {"tags": tags}
+    except HTTPException:
+        raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.post("/documents/{document_id}/tags/add")
@@ -411,14 +430,17 @@ async def add_document_tag(document_id: str, payload: TagUpdateRequest, db: Sess
         if not tag:
             raise HTTPException(status_code=400, detail="Tag cannot be empty")
 
+
         doc = _get_document_by_any_id(db, document_id)
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
+
 
         tags = _load_tags_from_doc(doc, db)
         if tag not in tags:
             tags.append(tag)
             _save_tags_to_doc(doc, tags, db)
+
 
         return {"success": True, "document_id": document_id, "tags": tags}
     except HTTPException:
@@ -427,7 +449,6 @@ async def add_document_tag(document_id: str, payload: TagUpdateRequest, db: Sess
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/documents/{document_id}/tags/remove")
 async def remove_document_tag(document_id: str, payload: TagUpdateRequest, db: Session = Depends(get_db)):
     try:
@@ -435,14 +456,17 @@ async def remove_document_tag(document_id: str, payload: TagUpdateRequest, db: S
         if not tag:
             raise HTTPException(status_code=400, detail="Tag cannot be empty")
 
+
         doc = _get_document_by_any_id(db, document_id)
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
+
 
         tags = _load_tags_from_doc(doc, db)
         if tag in tags:
             tags.remove(tag)
             _save_tags_to_doc(doc, tags, db)
+
 
         return {"success": True, "document_id": document_id, "tags": tags}
     except HTTPException:
@@ -561,10 +585,11 @@ async def get_files(
     page_size: int = 50, 
     page_token: Optional[str] = None, 
     query: Optional[str] = None,
-    db: Session = Depends(get_db)  # ✅ ADDED MISSING DB
+    db: Session = Depends(get_db)
 ):
     """
     List files from Google Drive + ADD TAGS from document_tags table
+    Fixed to handle both Drive file ID and internal Document ID lookups
     """
     if not drive_client:
         raise HTTPException(status_code=500, detail="Services not initialized")
@@ -573,7 +598,7 @@ async def get_files(
         if not drive_client.creds:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        # ✅ Get current user's email
+        # Get current user's email
         try:
             about = drive_client.service.about().get(fields='user').execute()
             current_user = about['user']['emailAddress']
@@ -587,21 +612,28 @@ async def get_files(
 
         files = []
         for file in results.get("files", []):
-            # ✅ LOOKUP DOCUMENT IN DB BY DRIVE FILE ID
-            doc = db.query(Document).filter(
-                Document.drive_file_id == file["id"]
-            ).first()
+            # ✅ FIXED: Use _get_document_by_any_id to lookup by BOTH Drive ID and internal ID
+            doc = _get_document_by_any_id(db, file["id"])
             
-            # ✅ GET TAGS FROM document_tags table
+            # ✅ FIXED: Get tags with fallback for direct drive_file_id lookup
             ai_tags = []
             tag_count = 0
             if doc:
+                # Primary: Use Document.id from lookup
                 doc_tags = db.query(DocumentTag).filter(
                     DocumentTag.document_id == doc.id
                 ).join(Tag).all()
                 ai_tags = [dt.tag.name for dt in doc_tags]
                 tag_count = len(ai_tags)
-                print(f"🏷️ Found {tag_count} tags for {file['name']}")
+                print(f"🏷️ Found {tag_count} tags for {file['name']} via doc.id={doc.id}")
+            else:
+                # Fallback: Direct query by drive_file_id if no Document record
+                doc_tags = db.query(DocumentTag).join(Document).join(Tag).filter(
+                    Document.drive_file_id == file["id"]
+                ).all()
+                ai_tags = [dt.tag.name for dt in doc_tags]
+                tag_count = len(ai_tags)
+                print(f"🏷️ Found {tag_count} tags for {file['name']} via direct drive_file_id")
 
             file_data = {
                 "id": file["id"],
@@ -614,8 +646,8 @@ async def get_files(
                 "thumbnailLink": file.get("thumbnailLink"),
                 "webViewLink": file.get("webViewLink"),
                 "iconLink": file.get("iconLink"),
-                "aiTags": ai_tags,        # ✅ FILLED WITH REAL TAGS
-                "tagCount": tag_count,    # ✅ NEW FIELD
+                "aiTags": ai_tags,        # ✅ Always populated from DB
+                "tagCount": tag_count,    # ✅ Accurate count
                 "type": "file",
                 "currentUser": current_user
             }
@@ -634,7 +666,6 @@ async def get_files(
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-    
 
 @router.get("/drive/files/{file_id}")
 async def get_file(file_id: str):
@@ -1120,37 +1151,43 @@ async def check_clause_saved(
 
 
 @router.get("/clauses/library")
-async def get_library_clauses(db: Session = Depends(get_db)):
-    """
-    Get all saved clauses from library
-    """
+async def get_library_clauses(
+    user_email: str = Query("public", description="Current user's email"),
+    db: Session = Depends(get_db)
+):
     try:
-        clauses = db.query(ClauseLibrary).order_by(
-            ClauseLibrary.created_at.desc()
-        ).all()
+        print(f"🔍 Loading library for: {user_email}")
+        
+        if user_email == "public":
+            print("⚠️ No user email - returning empty library")
+            return {"count": 0, "clauses": []}
+        
+        clauses = db.query(ClauseLibrary).filter(
+            ClauseLibrary.saved_by == user_email
+        ).order_by(ClauseLibrary.created_at.desc()).all()
         
         clause_list = [
             {
                 'id': c.id,
                 'title': c.clause_title,
                 'section_number': c.section_number,
-                'content_preview': c.clause_content[:200] + '...' if len(c.clause_content) > 200 else c.clause_content,
-                'source_document': c.source_document_name,
+                'content_preview': (c.clause_content[:200] + '...') if len(c.clause_content) > 200 else c.clause_content,
+                'source_document': c.source_document_name or 'Unknown',
                 'saved_by': c.saved_by,
                 'created_at': c.created_at.isoformat() if c.created_at else None
             }
             for c in clauses
         ]
         
-        return JSONResponse(
-            content={
-                "count": len(clause_list),
-                "clauses": clause_list
-            }
-        )
+        print(f"✅ Found {len(clause_list)} clauses for {user_email}")
+        return {"count": len(clause_list), "clauses": clause_list}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ Error: {e}")
+        return {"count": 0, "clauses": []}
+
+
+
 
 
 @router.post("/documents/{file_id}/extract-clauses")
@@ -1280,9 +1317,11 @@ async def get_cached_clauses(file_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
 @router.post("/clauses/save-to-library")
 async def save_clause_to_library(
     request: SaveClauseRequest,
+    user_email: str = Query(..., description="Current user's email"),  # ✅ REQUIRED
     db: Session = Depends(get_db)
 ):
     """
@@ -1329,7 +1368,7 @@ async def save_clause_to_library(
             section_number=doc_clause.section_number,
             source_document_id=document_id,
             source_document_name=document.title if document else None,
-            saved_by=document.owner_email if document else None
+            saved_by=user_email  # ✅ CURRENT USER!
         )
         
         db.add(library_clause)
@@ -1547,91 +1586,147 @@ async def cleanup_prod(db: Session = Depends(get_db)):
 from typing import Optional, List
 from fastapi import Query, HTTPException, Depends
 
+from datetime import datetime
+
+
+
 @router.get("/templates")
 async def list_templates(
     practice_area: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
+    """
+    Get ALL files from connected Drive WITH TAGS (skip folders, skip files without tags)
+    """
     try:
         current_user = get_current_user_email()
         if not current_user:
             raise HTTPException(status_code=401, detail="Not authenticated")
         
         templates = []
+        all_tags_set = set()
         
-        # 1. Clean orphans
-        db.query(Document).filter(
-            Document.account_email == current_user,
-            Document.drive_file_id.is_(None)
-        ).delete(synchronize_session=False)
-        db.commit()
+        print(f"📂 Loading files from Drive for: {current_user}")
         
-        # 2. Live Drive files with tags
-        drive_files_with_tags = []
+        # 1. Get all files from Drive
+        drive_files = []
         try:
             if 'drive_client' in globals() and drive_client and drive_client.creds:
                 results = drive_client.list_files(page_size=100)
                 drive_files = results.get('files', [])
-                
-                for file in drive_files:
-                    doc = db.query(Document).filter(
-                        Document.drive_file_id == file['id'],
-                        Document.account_email == current_user
-                    ).first()
-                    
-                    if doc:
-                        tags = db.query(Tag.name).join(DocumentTag).filter(
-                            DocumentTag.document_id == doc.id
-                        ).distinct().limit(10).all()
-                        
-                        if tags:
-                            drive_files_with_tags.append((file, [t[0] for t in tags]))
+                print(f"✅ Retrieved {len(drive_files)} files from Drive")
         except Exception as e:
-            print(f"Drive skip: {e}")
+            print(f"⚠️ Drive error: {e}")
+            return {"templates": [], "practice_areas": [], "total": 0}
         
-        # 3. Filter templates
-        for file, ai_tags in drive_files_with_tags:
-            name_lower = file['name'].lower()
-            tags_lower = [t.lower() for t in ai_tags]
+        # 2. Process each Drive file
+        for file in drive_files:
+            try:
+                # ✅ SKIP FOLDERS
+                mime_type = file.get('mimeType', '')
+                if mime_type == 'application/vnd.google-apps.folder':
+                    print(f"⏭️ Skipping folder: {file['name']}")
+                    continue
+                
+                file_id = file.get('id')
+                
+                # ✅ CHECK IF FILE EXISTS IN DB
+                doc = db.query(Document).filter(
+                    Document.drive_file_id == file_id,
+                    Document.account_email == current_user
+                ).first()
+                
+                # Skip if file not in DB
+                if not doc:
+                    continue
+                
+                # ✅ GET TAGS FOR THIS FILE
+                tags_query = db.query(Tag.name).join(DocumentTag).filter(
+                    DocumentTag.document_id == doc.id
+                ).all()
+                
+                # ✅ Extract strings properly from SQLAlchemy Row objects
+                tag_names = []
+                for tag_row in tags_query:
+                    if tag_row:
+                        tag_name = tag_row
+                        if tag_name and isinstance(tag_name, str):
+                            tag_names.append(tag_name)
+                        else:
+                            tag_names.append(str(tag_name) if tag_name else '')
+                
+                # Remove empty strings
+                tag_names = [t for t in tag_names if t.strip()]
+                
+                # ✅ ONLY INCLUDE FILES WITH TAGS
+                if not tag_names:
+                    continue
+                
+                print(f"✅ Adding template: {file['name']} ({len(tag_names)} tags)")
+                
+                # Add all tags to set for dropdown
+                for tag in tag_names:
+                    all_tags_set.add(tag)
+                
+                # ✅ NOW tag_names is guaranteed to be list of strings
+                file_name_lower = file.get('name', '').lower()
+                tags_lower = [t.lower() for t in tag_names]
+                
+                # Filter by search
+                if search and search.strip():
+                    search_lower = search.lower()
+                    if search_lower not in file_name_lower and not any(search_lower in t for t in tags_lower):
+                        continue
+                
+                # Filter by practice area
+                if practice_area and practice_area.strip():
+                    practice_area_lower = practice_area.lower()
+                    if not any(practice_area_lower in t for t in tags_lower):
+                        continue
+                
+                # ✅ FIX: owners is a list, so access first element properly
+                owner_name = "Unknown"
+                owners_list = file.get("owners", [])
+                if owners_list and isinstance(owners_list, list) and len(owners_list) > 0:
+                    first_owner = owners_list
+                    if isinstance(first_owner, dict):
+                        owner_name = first_owner.get("displayName", "Unknown")
+                
+                # Add to templates
+                templates.append({
+                    "id": file_id,
+                    "name": file.get('name', 'Untitled'),
+                    "title": file.get('name', 'Untitled'),
+                    "owner": owner_name,
+                    "modifiedTime": file.get("modifiedTime"),
+                    "size": int(file.get("size", 0)),
+                    "mimeType": mime_type,
+                    "aiTags": tag_names,
+                    "tagCount": len(tag_names),
+                    "fileUrl": file.get("webViewLink"),
+                    "type": "document"
+                })
             
-            if search and search.lower() not in name_lower and not any(search.lower() in t for t in tags_lower):
+            except Exception as file_error:
+                print(f"⚠️ Error processing file {file.get('name', 'Unknown')}: {file_error}")
                 continue
-            if practice_area and not any(practice_area.lower() in t for t in tags_lower):
-                continue
-            
-            templates.append({
-                "id": file['id'],
-                "name": file['name'],
-                "title": file['name'],
-                "owner": file.get("owners", [{}])[0].get("displayName", "Unknown"),
-                "modifiedTime": file.get("modifiedTime"),
-                "size": int(file.get("size", 0)),
-                "mimeType": file.get("mimeType", ""),
-                "aiTags": ai_tags,
-                "tagCount": len(ai_tags),
-                "fileUrl": file.get("webViewLink"),
-                "type": "document"
-            })
         
-        # 🔥 4. ALL USER TAGS (fixed variable name)
-        practice_areas_query = db.query(Tag.name.distinct()).join(DocumentTag).join(Document).filter(
-            Document.account_email == current_user,
-            Document.drive_file_id.is_not(None)
-        ).order_by(Tag.name.asc()).limit(100).all()
+        # Convert tags set to sorted list
+        practice_areas = sorted(list(all_tags_set))
         
-        practice_areas = [area[0] for area in practice_areas_query]  # ✅ Fixed name
-        
-        print(f"✅ Templates: {len(templates)} | Tags: {len(practice_areas)}")
+        print(f"✅ Templates: {len(templates)} files | Practice Areas: {len(practice_areas)}")
         
         return {
             "templates": templates,
-            "practice_areas": practice_areas,  # ✅ Consistent name
+            "practice_areas": practice_areas,
             "total": len(templates)
         }
         
     except Exception as e:
-        print(f"Templates error: {str(e)}")
+        print(f"❌ Templates error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 

@@ -71,37 +71,42 @@ async function loadDriveInfo() {
 
 // Refresh files
 async function refreshFiles() {
-  window.showNotification('🔄 Refreshing files from Google Drive...', 'info');
+  window.showNotification('Refreshing files from Google Drive...', 'info');
 
   try {
     const syncRes = await fetch(`${window.API_BASE_URL}/sync/drive-full`, { method: 'POST' });
     if (!syncRes.ok) {
-      window.showNotification('❌ Sync failed. Check backend logs.', 'error');
+      window.showNotification('Sync failed. Check backend logs.', 'error');
       return;
     }
 
+    // ✅ PERFECT: Uses fixed /drive/files with tags
     const filesRes = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
     if (!filesRes.ok) throw new Error('Failed to load files');
 
     const data = await filesRes.json();
     window.appState.files = data.files || [];
     window.appState.filteredFiles = window.appState.files;
+    
+    // ✅ Triggers re-render with new tags
     if (window.renderCurrentView) window.renderCurrentView();
-    window.showNotification('✅ Files refreshed', 'success');
+    
+    window.showNotification('Files refreshed', 'success');
   } catch (e) {
     console.error(e);
-    window.showNotification('❌ Refresh failed', 'error');
+    window.showNotification('Refresh failed', 'error');
   }
 }
 
+
 // Upload files
 function uploadFiles() {
-  window.showNotification('📤 Upload feature coming soon! Use Google Drive directly for now.', 'info');
+  window.showNotification('Upload feature coming soon! Use Google Drive directly for now.', 'info');
 }
 
 // Voice record
 function voiceRecord() {
-  window.showNotification('🎤 Voice Recording feature coming soon!', 'info');
+  window.showNotification('Voice Recording feature coming soon!', 'info');
 }
 
 // Logout user
@@ -114,7 +119,7 @@ async function logoutUser() {
       window.appState.filteredFiles = [];
       window.appState.driveInfo = null;
       
-      window.showNotification('🔓 Logging out...', 'info');
+      window.showNotification('Logging out...', 'info');
       
       // Clear any stored tokens from backend
       try {
@@ -139,12 +144,12 @@ async function logoutUser() {
           `;
         }
         
-        window.showNotification('✅ Logged out successfully!', 'success');
+        window.showNotification('Logged out successfully!', 'success');
       }, 500);
       
     } catch (error) {
       console.error('Logout failed:', error);
-      window.showNotification('❌ Logout failed. Please try again.', 'error');
+      window.showNotification('Logout failed. Please try again.', 'error');
     }
   }
 }

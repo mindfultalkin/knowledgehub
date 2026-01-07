@@ -4,7 +4,7 @@ console.log('Loading search.js...');
 // Train NLP model
 async function trainNLPModel() {
   try {
-    window.showNotification('🤖 Training NLP model on your documents...', 'info');
+    window.showNotification('Training NLP model on your documents...', 'info');
     
     const response = await fetch(`${window.API_BASE_URL}/nlp/train`, {
       method: 'POST'
@@ -13,14 +13,14 @@ async function trainNLPModel() {
     const data = await response.json();
     
     if (response.ok) {
-      window.showNotification(`✅ ${data.message} (${data.documents_processed || data.total_files || 0} documents)`, 'success');
+      window.showNotification(`${data.message} (${data.documents_processed || data.total_files || 0} documents)`, 'success');
     } else {
       throw new Error(data.detail || 'Training failed');
     }
     
   } catch (error) {
     console.error('Training failed:', error);
-    window.showNotification(`❌ NLP training failed: ${error.message}`, 'error');
+    window.showNotification(`NLP training failed: ${error.message}`, 'error');
   }
 }
 
@@ -46,13 +46,13 @@ async function performSearch() {
       `${window.API_BASE_URL}/search/simple` : 
       `${window.API_BASE_URL}/search/ai`;
     
-    console.log(`🔍 Calling: ${endpoint}?query=${encodeURIComponent(query)}`);
+    console.log(`Calling: ${endpoint}?query=${encodeURIComponent(query)}`);
     
     const response = await fetch(`${endpoint}?query=${encodeURIComponent(query)}`);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Server error:', errorText);
+      console.error('Server error:', errorText);
       throw new Error(`Search failed: ${response.status}`);
     }
     
@@ -61,8 +61,8 @@ async function performSearch() {
     window.appState.loading = false;
     
     const message = window.appState.searchType === 'simple' 
-      ? `✅ Found ${data.total_results || window.appState.searchResults.length} documents containing "${query}"`
-      : `🤖 Found ${data.total_results || window.appState.searchResults.length} semantically similar documents`;
+      ? `Found ${data.total_results || window.appState.searchResults.length} documents containing "${query}"`
+      : `Found ${data.total_results || window.appState.searchResults.length} semantically similar documents`;
     
     window.showNotification(message, 'success');
     if (window.renderCurrentView) window.renderCurrentView();
@@ -70,7 +70,7 @@ async function performSearch() {
   } catch (error) {
     console.error('Search failed:', error);
     window.appState.loading = false;
-    window.showNotification(`❌ Search failed: ${error.message}`, 'error');
+    window.showNotification(`Search failed: ${error.message}`, 'error');
   }
 }
 
@@ -78,7 +78,7 @@ async function performSearch() {
 function searchWithAI(query) {
   window.appState.searchQuery = query;
   window.appState.searchType = 'ai';
-  console.log(`🤖 Setting AI search for: "${query}"`);
+  console.log(`Setting AI search for: "${query}"`);
   performSearch();
 }
 
