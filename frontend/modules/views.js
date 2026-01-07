@@ -225,7 +225,7 @@ function renderFiles() {
     const aHasTags = (a.aiTags?.length > 0 || a.tagCount > 0) ? 0 : 1;
     const bHasTags = (b.aiTags?.length > 0 || b.tagCount > 0) ? 0 : 1;
     return aHasTags - bHasTags;
-  }).slice(0, window.appState.filesPerPage || 24);
+  }).slice(0, window.appState.filesPerPage || 96);
 
   return `
     <div class="view-container">
@@ -283,7 +283,7 @@ function renderFiles() {
           </div>
         ` : ''}
 
-        ${window.appState.files.length > (window.appState.filesPerPage || 24) ? `
+        ${window.appState.files.length > (window.appState.filesPerPage || 96) ? `
           <div style="text-align: center; margin-top: 24px;">
             <p style="color: var(--text-secondary);">
               Showing ${sortedFiles.length} of ${window.appState.files.length} files 
