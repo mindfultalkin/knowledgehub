@@ -1,7 +1,6 @@
 import io
 import PyPDF2
 from docx import Document
-from google_drive import GoogleDriveClient
 import os
 
 # Configure Tesseract OCR

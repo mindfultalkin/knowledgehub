@@ -1,4 +1,4 @@
-// modules/auth.js - Authentication & Google Drive
+// modules/auth.js - Authentication & Google Drive (SIMPLIFIED)
 console.log('Loading auth.js...');
 
 // Check auth status
@@ -7,10 +7,36 @@ async function checkAuthStatus() {
     const response = await fetch(`${window.API_BASE_URL}/auth/status`);
     const data = await response.json();
     window.appState.authenticated = data.authenticated;
+    
+    console.log('Auth status check:', data);
+    
+    // Update UI
+    updateAuthUI(data.authenticated);
+    
     return data;
   } catch (error) {
     console.error('Auth status check failed:', error);
+    window.appState.authenticated = false;
+    updateAuthUI(false);
     return { authenticated: false };
+  }
+}
+
+// Update UI based on authentication status
+function updateAuthUI(isAuthenticated) {
+  const statusEl = document.getElementById('connectionStatus');
+  if (statusEl) {
+    if (isAuthenticated) {
+      statusEl.innerHTML = `
+        <div class="status-dot" style="background: #4CAF50;"></div>
+        <span>Connected to Google Drive</span>
+      `;
+    } else {
+      statusEl.innerHTML = `
+        <div class="status-dot" style="background: #ff9800;"></div>
+        <span>Not Connected</span>
+      `;
+    }
   }
 }
 
@@ -19,10 +45,15 @@ async function initiateGoogleAuth() {
   try {
     const response = await fetch(`${window.API_BASE_URL}/auth/google`);
     const data = await response.json();
+    
+    console.log('Redirecting to Google auth URL');
     window.location.href = data.auth_url;
+    
   } catch (error) {
     console.error('Auth initiation failed:', error);
-    alert('Failed to start Google authentication. Please try again.');
+    if (window.showNotification) {
+      window.showNotification('Failed to start Google authentication. Please try again.', 'error');
+    }
   }
 }
 
@@ -36,77 +67,98 @@ async function loadFiles() {
   if (window.renderCurrentView) window.renderCurrentView();
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
-    if (!response.ok) {
+    // Try database first
+    const response = await fetch(`${window.API_BASE_URL}/documents?limit=50`);
+    if (response.ok) {
+      const data = await response.json();
+      window.appState.files = data.documents || [];
+      window.appState.filteredFiles = window.appState.files;
+      window.appState.loading = false;
+      
+      console.log(`Loaded ${window.appState.files.length} files from database`);
+      
+      if (window.renderCurrentView) window.renderCurrentView();
+      return;
+    }
+    
+    // Fallback to direct Drive API
+    const driveResponse = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
+    if (!driveResponse.ok) {
       throw new Error('Failed to load files');
     }
     
-    const data = await response.json();
-    window.appState.files = data.files || [];
+    const driveData = await driveResponse.json();
+    window.appState.files = driveData.files || [];
     window.appState.filteredFiles = window.appState.files;
     window.appState.loading = false;
+    
+    console.log(`Loaded ${window.appState.files.length} files from Drive API`);
     
     if (window.renderCurrentView) window.renderCurrentView();
   } catch (error) {
     console.error('Failed to load files:', error);
     window.appState.loading = false;
-    alert('Failed to load files. Please try again or reconnect to Google Drive.');
+    
+    if (window.showNotification) {
+      window.showNotification('Failed to load files. Please try refreshing.', 'error');
+    }
   }
 }
 
-// Load drive info
+// Load drive info - REMOVED /auth/account-info call
 async function loadDriveInfo() {
   if (!window.appState.authenticated) {
     return;
   }
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/drive/connection-status`);
-    const data = await response.json();
-    window.appState.driveInfo = data;
+    // Use the auth/status endpoint instead
+    const response = await fetch(`${window.API_BASE_URL}/auth/status`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.authenticated) {
+        window.appState.accountInfo = {
+          email: data.user?.email || 'Connected User',
+          name: data.user?.displayName || 'Google Drive User'
+        };
+        console.log('Loaded account info:', window.appState.accountInfo.email);
+      }
+    }
   } catch (error) {
-    console.error('Failed to load drive info:', error);
+    console.error('Failed to load account info:', error);
   }
 }
 
 // Refresh files
 async function refreshFiles() {
-  window.showNotification('Refreshing files from Google Drive...', 'info');
+  if (!window.appState.authenticated) {
+    if (window.showNotification) {
+      window.showNotification('Please connect to Google Drive first', 'error');
+    }
+    return;
+  }
+  
+  if (window.showNotification) {
+    window.showNotification('Refreshing files from Google Drive...', 'info');
+  }
 
   try {
     const syncRes = await fetch(`${window.API_BASE_URL}/sync/drive-full`, { method: 'POST' });
-    if (!syncRes.ok) {
-      window.showNotification('Sync failed. Check backend logs.', 'error');
-      return;
+    const syncData = await syncRes.json();
+    
+    if (window.showNotification) {
+      window.showNotification(syncData.message || 'Sync completed', 'success');
     }
 
-    // ✅ PERFECT: Uses fixed /drive/files with tags
-    const filesRes = await fetch(`${window.API_BASE_URL}/drive/files?page_size=100`);
-    if (!filesRes.ok) throw new Error('Failed to load files');
-
-    const data = await filesRes.json();
-    window.appState.files = data.files || [];
-    window.appState.filteredFiles = window.appState.files;
+    // Reload files after sync
+    await loadFiles();
     
-    // ✅ Triggers re-render with new tags
-    if (window.renderCurrentView) window.renderCurrentView();
-    
-    window.showNotification('Files refreshed', 'success');
   } catch (e) {
     console.error(e);
-    window.showNotification('Refresh failed', 'error');
+    if (window.showNotification) {
+      window.showNotification('Refresh failed. Please try again.', 'error');
+    }
   }
-}
-
-
-// Upload files
-function uploadFiles() {
-  window.showNotification('Upload feature coming soon! Use Google Drive directly for now.', 'info');
-}
-
-// Voice record
-function voiceRecord() {
-  window.showNotification('Voice Recording feature coming soon!', 'info');
 }
 
 // Logout user
@@ -117,11 +169,13 @@ async function logoutUser() {
       window.appState.authenticated = false;
       window.appState.files = [];
       window.appState.filteredFiles = [];
-      window.appState.driveInfo = null;
+      window.appState.accountInfo = null;
       
-      window.showNotification('Logging out...', 'info');
+      if (window.showNotification) {
+        window.showNotification('Logging out...', 'info');
+      }
       
-      // Clear any stored tokens from backend
+      // Call backend logout
       try {
         await fetch(`${window.API_BASE_URL}/auth/logout`, {
           method: 'POST'
@@ -130,26 +184,23 @@ async function logoutUser() {
         console.log('Logout endpoint not available, clearing locally');
       }
       
-      // Redirect to dashboard after short delay
-      setTimeout(() => {
-        window.appState.currentView = 'dashboard';
-        if (window.renderCurrentView) window.renderCurrentView();
-        
-        // Update connection status
-        const statusEl = document.getElementById('connectionStatus');
-        if (statusEl) {
-          statusEl.innerHTML = `
-            <div class="status-dot" style="background: #ff9800;"></div>
-            <span>Not Connected</span>
-          `;
-        }
-        
+      // Update UI
+      updateAuthUI(false);
+      
+      // Redirect to dashboard
+      if (window.navigateTo) {
+        window.navigateTo('dashboard');
+      }
+      
+      if (window.showNotification) {
         window.showNotification('Logged out successfully!', 'success');
-      }, 500);
+      }
       
     } catch (error) {
       console.error('Logout failed:', error);
-      window.showNotification('Logout failed. Please try again.', 'error');
+      if (window.showNotification) {
+        window.showNotification('Logout failed. Please try again.', 'error');
+      }
     }
   }
 }
@@ -160,6 +211,4 @@ window.initiateGoogleAuth = initiateGoogleAuth;
 window.loadFiles = loadFiles;
 window.loadDriveInfo = loadDriveInfo;
 window.refreshFiles = refreshFiles;
-window.uploadFiles = uploadFiles;
-window.voiceRecord = voiceRecord;
 window.logoutUser = logoutUser;

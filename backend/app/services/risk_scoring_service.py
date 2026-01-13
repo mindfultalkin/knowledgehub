@@ -1,4 +1,4 @@
-# backend/services/risk_scoring.py
+# backend/services/risk_scoring_service.py
 
 REQUIRED_CLAUSES = [
     "indemnification", "governing law", "dispute resolution", "confidentiality", "force majeure", "termination", "payment terms", "intellectual property"

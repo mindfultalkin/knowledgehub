@@ -9,17 +9,16 @@ import os
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, backend_dir)
 
-from database import init_database, test_connection, engine
-from models import *  # Import all models
-import config
+from app.database import init_database, test_connection, engine
+from app.config import MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT, MYSQL_USER
 
 def main():
     print("="*60)
     print("KNOWLEDGE HUB - DATABASE INITIALIZATION")
     print("="*60)
-    print(f"\nDatabase: {config.MYSQL_DATABASE}")
-    print(f"Host: {config.MYSQL_HOST}:{config.MYSQL_PORT}")
-    print(f"User: {config.MYSQL_USER}\n")
+    print(f"\nDatabase: {MYSQL_DATABASE}")
+    print(f"Host: {MYSQL_HOST}:{MYSQL_PORT}")
+    print(f"User: {MYSQL_USER}\n")
     
     # Test connection
     print("🔄 Testing database connection...")

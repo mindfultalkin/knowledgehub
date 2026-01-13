@@ -140,11 +140,21 @@ def init_database():
     
     try:
         logger.info("🔄 Creating database tables...")
+        
+        # Import all models to register them with Base
+        from app.models import (
+            PracticeArea, SubPracticeArea, Document, DocumentChunk,
+            Tag, DocumentTag, VectorEmbedding, ProcessingQueue,
+            SyncCheckpoint, AccessControl, DocumentClause, ClauseLibrary
+        )
+        
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Database tables created!")
         return True
     except Exception as e:
         logger.error(f"❌ Database init failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 

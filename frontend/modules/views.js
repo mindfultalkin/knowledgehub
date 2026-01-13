@@ -12,25 +12,26 @@ window.debounce = window.debounce || function(func, wait) {
 
 // Render dashboard
 // Render dashboard - WITH TAG CLOUD
+// Render dashboard - WITH TAG CLOUD
 function renderDashboard() {
   const stats = {
     totalFiles: window.appState.files.length,
     contracts: window.appState.files.filter(f => {
-      const name = f.name.toLowerCase();
-      const tags = (f.aiTags || []).map(t => t.toLowerCase());
+      const name = f.name?.toLowerCase() || '';  // FIX: Add ?. and default to ''
+      const tags = (f.aiTags || []).map(t => t?.toLowerCase() || '');  // FIX: Add ?. and default to ''
       return name.includes('contract') || 
              name.includes('agreement') || 
              tags.some(tag => tag.includes('contract') || tag.includes('agreement'));
     }).length,
     clauses: window.appState.files.filter(f => {
-      const name = f.name.toLowerCase();
-      const tags = (f.aiTags || []).map(t => t.toLowerCase());
+      const name = f.name?.toLowerCase() || '';  // FIX: Add ?. and default to ''
+      const tags = (f.aiTags || []).map(t => t?.toLowerCase() || '');  // FIX: Add ?. and default to ''
       return name.includes('clause') || 
              tags.some(tag => tag.includes('clause'));
     }).length,
     practiceNotes: window.appState.files.filter(f => {
-      const name = f.name.toLowerCase();
-      const tags = (f.aiTags || []).map(t => t.toLowerCase());
+      const name = f.name?.toLowerCase() || '';  // FIX: Add ?. and default to ''
+      const tags = (f.aiTags || []).map(t => t?.toLowerCase() || '');  // FIX: Add ?. and default to ''
       return (name.includes('practice') && (name.includes('note') || name.includes('memo'))) || 
              name.includes('practice note') ||
              tags.some(tag => tag.includes('practice') && (tag.includes('note') || tag.includes('memo')));
@@ -41,7 +42,9 @@ function renderDashboard() {
   const allTags = {};
   window.appState.files.forEach(file => {
     (file.aiTags || []).forEach(tag => {
-      allTags[tag] = (allTags[tag] || 0) + 1;
+      if (tag) {  // FIX: Check if tag exists
+        allTags[tag] = (allTags[tag] || 0) + 1;
+      }
     });
   });
   const sortedTags = Object.entries(allTags)

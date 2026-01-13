@@ -5,17 +5,6 @@ Syncs files from Google Drive to database with multi-user support
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from google_drive import GoogleDriveClient
-from models.metadata import (
-    Document, 
-    ProcessingQueue, 
-    SyncCheckpoint, 
-    TaskType, 
-    ProcessingStatus,
-    Tag,
-    DocumentTag
-)
-from tagging import SimpleTagger
 import hashlib
 import config
 import os  # FIXED: Added missing import
@@ -39,10 +28,10 @@ except ImportError:
 class DriveIngestionService:
     """Service to sync Google Drive files to database"""
 
-    def __init__(self, drive_client: GoogleDriveClient, db: Session):
+    def __init__(self, drive_client, db: Session):
         self.drive_client = drive_client
         self.db = db
-        self.tagger = SimpleTagger()
+        self.tagger = None  # Will be set later
         self._current_user_email = None
         
         # Create temp_downloads directory if it doesn't exist
@@ -151,6 +140,9 @@ class DriveIngestionService:
     
         try:
             # Check if file exists in database
+            from app.models.document import Document
+            from app.models.processing_queue import ProcessingQueue, TaskType, ProcessingStatus
+            
             existing_doc = self.db.query(Document).filter(
                 Document.drive_file_id == drive_file_id
             ).first()
@@ -219,6 +211,9 @@ class DriveIngestionService:
         Creates tags in database ONLY when found in content
         """
         # Get document from database
+        from app.models.document import Document
+        from app.models.tag import Tag, DocumentTag
+        
         doc = self.db.query(Document).filter(Document.id == document_id).first()
         if not doc:
             doc = self.db.query(Document).filter(Document.drive_file_id == document_id).first()
@@ -302,6 +297,8 @@ class DriveIngestionService:
     def _save_tags_to_database(self, document_id: str, tags_to_create: List[str]):
         """Save tags to database, creating them if they don't exist"""
         try:
+            from app.models.tag import Tag, DocumentTag
+            
             # Remove any existing tags first (clean slate)
             existing_tags = self.db.query(DocumentTag).filter(
                 DocumentTag.document_id == document_id
@@ -360,7 +357,7 @@ class DriveIngestionService:
     
     def _is_tag_in_master_taxonomy(self, tag_name: str) -> bool:
         """Check if a tag is in the master taxonomy"""
-        from tagging import ContentBasedTagger
+        from .tag_service import ContentBasedTagger
         
         # Remove category prefix for checking
         check_name = tag_name
@@ -449,6 +446,8 @@ class DriveIngestionService:
         2. AI tagging
         3. Create embeddings
         """
+        from app.models.processing_queue import ProcessingQueue, TaskType, ProcessingStatus
+        
         tasks = [
             TaskType.EXTRACT_TEXT,
             TaskType.AI_TAGGING,
@@ -481,6 +480,8 @@ class DriveIngestionService:
         Save sync checkpoint
         Records when sync happened, how many files, any errors
         """
+        from app.models.sync_checkpoint import SyncCheckpoint
+        
         checkpoint = SyncCheckpoint(
             source='google_drive',
             last_sync_time=datetime.utcnow(),
@@ -493,6 +494,8 @@ class DriveIngestionService:
 
     def get_last_sync_info(self) -> Optional[Dict]:
         """Get information about last sync"""
+        from app.models.sync_checkpoint import SyncCheckpoint
+        
         last_checkpoint = self.db.query(SyncCheckpoint).filter(
             SyncCheckpoint.source == 'google_drive'
         ).order_by(SyncCheckpoint.created_at.desc()).first()
@@ -508,6 +511,9 @@ class DriveIngestionService:
 
     def get_sync_stats(self) -> Dict:
         """Get overall sync statistics"""
+        from app.models.document import Document
+        from app.models.processing_queue import ProcessingQueue, ProcessingStatus
+        
         total_docs = self.db.query(Document).count()
         pending_tasks = self.db.query(ProcessingQueue).filter(
             ProcessingQueue.status == ProcessingStatus.PENDING

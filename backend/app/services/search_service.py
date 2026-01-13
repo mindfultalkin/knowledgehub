@@ -1,12 +1,12 @@
-# backend/simple_search.py
+# backend/app/services/search_service.py
 import re
 from typing import List, Dict
-from document_processor import DocumentProcessor
+
 
 class SimpleTextSearch:
     def __init__(self, drive_client):
         self.drive_client = drive_client
-        self.doc_processor = DocumentProcessor(drive_client)
+        self.doc_processor = None  # Will be set from document_processor_service
         self.documents = []
         self.is_loaded = False
     
@@ -24,6 +24,10 @@ class SimpleTextSearch:
             files = files_response.get('files', [])
             
             # Process documents to extract content
+            from .document_processor_service import DocumentProcessor
+            if not self.doc_processor:
+                self.doc_processor = DocumentProcessor(self.drive_client)
+            
             self.documents = self.doc_processor.prepare_documents_for_nlp(files)
             self.is_loaded = True
             
