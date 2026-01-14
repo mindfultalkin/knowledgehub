@@ -380,11 +380,11 @@ function renderTemplates() {
             
             <!-- Practice Area - Right, compact -->
             <div style="flex: 1; min-width: 220px; max-width: 280px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Practice Area</label>
+              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">TAGS</label>
               <select id="practiceAreaFilter" 
                       style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
                       onchange="window.loadTemplates()">
-                <option value="">All Areas (Loading...)</option>
+                <option value="">All TAGS (Loading...)</option>
               </select>
           </div>
         </div>
@@ -475,7 +475,7 @@ window.loadTemplates = async function() {
         <div class="empty-state">
           <div class="document-icon"></div>
           <h3>No templates match filters</h3>
-          <p>Try different search or practice area</p>
+          <p>Try different search or TAGS</p>
         </div>
       `;
       if (countEl) countEl.textContent = '0 templates';

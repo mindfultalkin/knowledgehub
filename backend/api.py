@@ -1314,12 +1314,12 @@ async def get_library_clauses(
         
         clause_list = []
         
-        for clause in clauses:
+        for clause in clauses:  # ← This variable is 'clause', not 'c'
             # Get tags for this clause
             clause_tags = db.query(ClauseTag, Tag).join(
                 Tag, ClauseTag.tag_id == Tag.id
             ).filter(
-                ClauseTag.clause_id == clause.id
+                ClauseTag.clause_id == clause.id  # ← Changed from 'c.id' to 'clause.id'
             ).all()
             
             tags = [
@@ -1332,15 +1332,15 @@ async def get_library_clauses(
             ]
             
             clause_list.append({
-                'id': c.id,
-                'title': c.clause_title,
-                'section_number': c.section_number,
-                'content_preview': (c.clause_content[:200] + '...') if len(c.clause_content) > 200 else c.clause_content,
-                'source_document': c.source_document_name or 'Unknown',
-                'saved_by': c.saved_by,
-                'created_at': c.created_at.isoformat() if c.created_at else None,
-                'tags': tags,  # ← ADD THIS
-                'tag_count': len(tags)  # ← ADD THIS
+                'id': clause.id,  # ← Changed from 'c.id' to 'clause.id'
+                'title': clause.clause_title,  # ← Changed from 'c.clause_title'
+                'section_number': clause.section_number,  # ← Changed from 'c.section_number'
+                'content_preview': (clause.clause_content[:200] + '...') if len(clause.clause_content) > 200 else clause.clause_content,  # ← Changed from 'c.clause_content'
+                'source_document': clause.source_document_name or 'Unknown',  # ← Changed from 'c.source_document_name'
+                'saved_by': clause.saved_by,  # ← Changed from 'c.saved_by'
+                'created_at': clause.created_at.isoformat() if clause.created_at else None,  # ← Changed from 'c.created_at'
+                'tags': tags,
+                'tag_count': len(tags)
             })
         
         print(f"✅ Found {len(clause_list)} clauses for {user_email}")
@@ -1348,6 +1348,8 @@ async def get_library_clauses(
         
     except Exception as e:
         print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         return {"count": 0, "clauses": []}
 
 
@@ -1747,12 +1749,6 @@ async def cleanup_prod(db: Session = Depends(get_db)):
     return {"cleaned": orphans}
 
 
-from typing import Optional, List
-from fastapi import Query, HTTPException, Depends
-
-from datetime import datetime
-
-
 
 @router.get("/templates")
 async def list_templates(
@@ -1814,24 +1810,28 @@ async def list_templates(
                     DocumentTag.document_id == doc.id
                 ).all()
                 
-                # ✅ Extract tag names
+                # ✅ Extract and clean tag names
                 tag_names = []
-                for tag_row in tags_query:
-                    if tag_row:
-                        tag_name = tag_row
+                for tag_tuple in tags_query:
+                    if tag_tuple and len(tag_tuple) > 0:
+                        tag_name = tag_tuple[0]  # Access first element of tuple
                         if tag_name and isinstance(tag_name, str):
-                            tag_names.append(tag_name)
-                        else:
-                            tag_names.append(str(tag_name) if tag_name else '')
+                            # Clean the tag - strip whitespace and remove quotes
+                            clean_tag = tag_name.strip()
+                            # Remove surrounding quotes if present
+                            if clean_tag.startswith("'") and clean_tag.endswith("'"):
+                                clean_tag = clean_tag[1:-1]
+                            elif clean_tag.startswith('"') and clean_tag.endswith('"'):
+                                clean_tag = clean_tag[1:-1]
+                            
+                            if clean_tag:  # Only add non-empty tags
+                                tag_names.append(clean_tag)
                 
-                # Remove empty strings
-                tag_names = [t for t in tag_names if t.strip()]
-                
-                # ✅ ADD TAGS TO PRACTICE AREA SET (only from template files)
+                # ✅ ADD CLEAN TAGS TO PRACTICE AREA SET (only from template files)
                 for tag in tag_names:
                     all_tags_set.add(tag)
                 
-                # ✅ NOW tag_names is guaranteed to be list of strings
+                # ✅ NOW tag_names is guaranteed to be list of clean strings
                 file_name_lower = file.get('name', '').lower()
                 tags_lower = [t.lower() for t in tag_names]
                 
@@ -1851,7 +1851,7 @@ async def list_templates(
                 owner_name = "Unknown"
                 owners_list = file.get("owners", [])
                 if owners_list and isinstance(owners_list, list) and len(owners_list) > 0:
-                    first_owner = owners_list
+                    first_owner = owners_list[0] if len(owners_list) > 0 else {}
                     if isinstance(first_owner, dict):
                         owner_name = first_owner.get("displayName", "Unknown")
                 
@@ -1864,7 +1864,7 @@ async def list_templates(
                     "modifiedTime": file.get("modifiedTime"),
                     "size": int(file.get("size", 0)),
                     "mimeType": mime_type,
-                    "aiTags": tag_names,  # Empty list if no tags
+                    "aiTags": tag_names,  # Empty list if no tags (already cleaned)
                     "tagCount": len(tag_names),
                     "fileUrl": file.get("webViewLink"),
                     "type": "document",
@@ -1902,7 +1902,6 @@ async def list_templates(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
 
 
 
