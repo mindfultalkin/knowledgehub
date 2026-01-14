@@ -1,51 +1,38 @@
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from fastapi.responses import RedirectResponse, JSONResponse
-from typing import Optional, List
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 import os
 import json
-from models.metadata import DocumentTag
-from models.metadata import DocumentChunk, VectorEmbedding
-from models.metadata import Document, DocumentTag, Tag
-from models.metadata import PracticeArea, SubPracticeArea  
-from fastapi import Query# ADD THIS
-from sqlalchemy import text
+import asyncio
+from datetime import datetime
+from pydantic import BaseModel
 
-
-
-
-# Import config FIRST
 import config
-
-#add note here
-from fastapi import Body
-from googleapiclient.http import MediaInMemoryUpload
-from services.drive_ingestion import DriveIngestionService
-
-# Then import database
 from database import get_db
 
-# Then import other modules
+# Models - Split correctly
+from models.metadata import (
+    Document, DocumentTag, Tag, DocumentChunk, VectorEmbedding,
+    PracticeArea, SubPracticeArea, ContentType
+    # ClauseTag is NOT here - it's in clauses.py
+)
+
+from models.clauses import DocumentClause, ClauseLibrary, ClauseTag  # ← ADD ClauseTag here
+
+# Services
+from services.drive_ingestion import DriveIngestionService
+from services.clause_extractor import ClauseExtractor
+from services.risk_scoring import score_contract
+from services.universal_content_extractor import UniversalContentExtractor
+
+# Other modules
 from google_drive import GoogleDriveClient
 from tagging import SimpleTagger
 from document_processor import DocumentProcessor
 from simple_search import SimpleTextSearch
-from services.drive_ingestion import DriveIngestionService
-from models import Document
-
-# CLAUSES THESE IMPORTS
-from services.clause_extractor import ClauseExtractor
-from models.clauses import DocumentClause, ClauseLibrary
-import asyncio
-
-from pydantic import BaseModel
-from models import Document, DocumentClause
-from database import SessionLocal
-from sqlalchemy.orm import Session
-from fastapi import Depends, HTTPException
-from services.risk_scoring import score_contract
-from pydantic import BaseModel
-
+from googleapiclient.http import MediaInMemoryUpload
 
 router = APIRouter(prefix="/api")
 
@@ -85,6 +72,26 @@ class ClauseLibraryListResponse(BaseModel):
 
 class TagUpdateRequest(BaseModel):
     tag: str
+
+
+# ==================== CLAUSE TAG PYDANTIC MODELS ====================
+
+class ClauseTagCreate(BaseModel):
+    clause_id: int
+    tag_name: str
+
+class ClauseTagRemove(BaseModel):
+    clause_id: int
+    tag_id: int
+
+class ClauseWithTagsResponse(BaseModel):
+    id: int
+    clause_title: str
+    section_number: str
+    content_preview: str
+    tags: List[Dict[str, Any]]
+    saved_by: str
+    created_at: str
 
 
 def _load_tags_from_doc(doc, db: Session):
@@ -1305,18 +1312,36 @@ async def get_library_clauses(
             ClauseLibrary.saved_by == user_email
         ).order_by(ClauseLibrary.created_at.desc()).all()
         
-        clause_list = [
-            {
+        clause_list = []
+        
+        for clause in clauses:
+            # Get tags for this clause
+            clause_tags = db.query(ClauseTag, Tag).join(
+                Tag, ClauseTag.tag_id == Tag.id
+            ).filter(
+                ClauseTag.clause_id == clause.id
+            ).all()
+            
+            tags = [
+                {
+                    "id": tag.id,
+                    "name": tag.name,
+                    "category": tag.category
+                }
+                for _, tag in clause_tags
+            ]
+            
+            clause_list.append({
                 'id': c.id,
                 'title': c.clause_title,
                 'section_number': c.section_number,
                 'content_preview': (c.clause_content[:200] + '...') if len(c.clause_content) > 200 else c.clause_content,
                 'source_document': c.source_document_name or 'Unknown',
                 'saved_by': c.saved_by,
-                'created_at': c.created_at.isoformat() if c.created_at else None
-            }
-            for c in clauses
-        ]
+                'created_at': c.created_at.isoformat() if c.created_at else None,
+                'tags': tags,  # ← ADD THIS
+                'tag_count': len(tags)  # ← ADD THIS
+            })
         
         print(f"✅ Found {len(clause_list)} clauses for {user_email}")
         return {"count": len(clause_list), "clauses": clause_list}
@@ -1736,7 +1761,9 @@ async def list_templates(
     db: Session = Depends(get_db)
 ):
     """
-    Get ALL files from connected Drive WITH TAGS (skip folders, skip files without tags)
+    Get ALL TEMPLATE files (content_type = 'template') from connected Drive
+    Show ALL template files (even without tags)
+    Only tags from template files appear in practice areas
     """
     try:
         current_user = get_current_user_email()
@@ -1744,9 +1771,9 @@ async def list_templates(
             raise HTTPException(status_code=401, detail="Not authenticated")
         
         templates = []
-        all_tags_set = set()
+        all_tags_set = set()  # Will collect tags ONLY from template files
         
-        print(f"📂 Loading files from Drive for: {current_user}")
+        print(f"📂 Loading ALL TEMPLATE files for: {current_user}")
         
         # 1. Get all files from Drive
         drive_files = []
@@ -1770,22 +1797,24 @@ async def list_templates(
                 
                 file_id = file.get('id')
                 
-                # ✅ CHECK IF FILE EXISTS IN DB
+                # ✅ CHECK IF FILE EXISTS IN DB AND IS A TEMPLATE
                 doc = db.query(Document).filter(
                     Document.drive_file_id == file_id,
-                    Document.account_email == current_user
+                    Document.account_email == current_user,
+                    Document.content_type == ContentType.TEMPLATE  # ← ONLY TEMPLATES
                 ).first()
                 
-                # Skip if file not in DB
+                # Skip if file not in DB or not a template
                 if not doc:
+                    print(f"⏭️ Skipping non-template or not in DB: {file['name']}")
                     continue
                 
-                # ✅ GET TAGS FOR THIS FILE
+                # ✅ GET TAGS FOR THIS TEMPLATE FILE (if any)
                 tags_query = db.query(Tag.name).join(DocumentTag).filter(
                     DocumentTag.document_id == doc.id
                 ).all()
                 
-                # ✅ Extract strings properly from SQLAlchemy Row objects
+                # ✅ Extract tag names
                 tag_names = []
                 for tag_row in tags_query:
                     if tag_row:
@@ -1798,13 +1827,7 @@ async def list_templates(
                 # Remove empty strings
                 tag_names = [t for t in tag_names if t.strip()]
                 
-                # ✅ ONLY INCLUDE FILES WITH TAGS
-                if not tag_names:
-                    continue
-                
-                print(f"✅ Adding template: {file['name']} ({len(tag_names)} tags)")
-                
-                # Add all tags to set for dropdown
+                # ✅ ADD TAGS TO PRACTICE AREA SET (only from template files)
                 for tag in tag_names:
                     all_tags_set.add(tag)
                 
@@ -1824,7 +1847,7 @@ async def list_templates(
                     if not any(practice_area_lower in t for t in tags_lower):
                         continue
                 
-                # ✅ FIX: owners is a list, so access first element properly
+                # ✅ Get owner info
                 owner_name = "Unknown"
                 owners_list = file.get("owners", [])
                 if owners_list and isinstance(owners_list, list) and len(owners_list) > 0:
@@ -1832,8 +1855,8 @@ async def list_templates(
                     if isinstance(first_owner, dict):
                         owner_name = first_owner.get("displayName", "Unknown")
                 
-                # Add to templates
-                templates.append({
+                # ✅ ADD ALL TEMPLATE FILES (even without tags)
+                template_data = {
                     "id": file_id,
                     "name": file.get('name', 'Untitled'),
                     "title": file.get('name', 'Untitled'),
@@ -1841,25 +1864,37 @@ async def list_templates(
                     "modifiedTime": file.get("modifiedTime"),
                     "size": int(file.get("size", 0)),
                     "mimeType": mime_type,
-                    "aiTags": tag_names,
+                    "aiTags": tag_names,  # Empty list if no tags
                     "tagCount": len(tag_names),
                     "fileUrl": file.get("webViewLink"),
-                    "type": "document"
-                })
-            
+                    "type": "document",
+                    "content_type": "template"  # Always template for this endpoint
+                }
+                
+                templates.append(template_data)
+                
+                if tag_names:
+                    print(f"✅ Template with {len(tag_names)} tags: {file['name']}")
+                else:
+                    print(f"📋 Template (no tags): {file['name']}")
+                
             except Exception as file_error:
                 print(f"⚠️ Error processing file {file.get('name', 'Unknown')}: {file_error}")
+                import traceback
+                traceback.print_exc()
                 continue
         
-        # Convert tags set to sorted list
+        # Convert tags set to sorted list (practice areas)
         practice_areas = sorted(list(all_tags_set))
         
-        print(f"✅ Templates: {len(templates)} files | Practice Areas: {len(practice_areas)}")
+        print(f"✅ Found {len(templates)} template files | Practice Areas: {len(practice_areas)}")
         
         return {
             "templates": templates,
             "practice_areas": practice_areas,
-            "total": len(templates)
+            "total": len(templates),
+            "current_user": current_user,
+            "message": f"Showing all {len(templates)} template files"
         }
         
     except Exception as e:
@@ -1893,6 +1928,485 @@ async def cleanup_templates(db: Session = Depends(get_db)):
         "cleaned": orphans,
         "message": f"Removed {orphans} orphan template records"
     }
+
+@router.get("/documents/template-stats")
+async def get_template_stats(db: Session = Depends(get_db)):
+    """Get statistics about templates vs other documents"""
+    try:
+        # Get current user
+        current_user = get_current_user_email()
+        if not current_user:
+            return {"error": "Not authenticated"}
+        
+        # Count documents by content_type for current user
+        templates = db.query(Document).filter(
+            Document.account_email == current_user,
+            Document.content_type == ContentType.TEMPLATE
+        ).count()
+        
+        others = db.query(Document).filter(
+            Document.account_email == current_user,
+            Document.content_type == ContentType.OTHER
+        ).count()
+        
+        total = db.query(Document).filter(
+            Document.account_email == current_user
+        ).count()
+        
+        return {
+            "templates": templates,
+            "other_documents": others,
+            "total_documents": total,
+            "template_percentage": round((templates / total * 100), 2) if total > 0 else 0
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+# ==================== CLAUSE TAGS MANAGEMENT ====================
+
+@router.post("/clauses/library/tags/add")
+async def add_tag_to_clause(
+    request: ClauseTagCreate,
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a tag to a saved clause in the library
+    """
+    try:
+        print(f"🏷️ Adding tag '{request.tag_name}' to clause ID {request.clause_id}")
+        
+        # 1. Verify the clause exists and belongs to the user
+        clause = db.query(ClauseLibrary).filter(
+            ClauseLibrary.id == request.clause_id,
+            ClauseLibrary.saved_by == user_email
+        ).first()
+        
+        if not clause:
+            raise HTTPException(
+                status_code=404, 
+                detail="Clause not found or you don't have permission"
+            )
+        
+        # 2. Clean tag name
+        tag_name = request.tag_name.strip()
+        if not tag_name:
+            raise HTTPException(status_code=400, detail="Tag name cannot be empty")
+        
+        # 3. Find or create the tag in master tags table
+        tag = db.query(Tag).filter(Tag.name == tag_name).first()
+        if not tag:
+            # Create new tag
+            tag = Tag(
+                name=tag_name,
+                category="clause",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(tag)
+            db.flush()  # Get the ID
+            print(f"📝 Created new tag: {tag_name}")
+        
+        # 4. Check if tag is already linked to this clause
+        existing_clause_tag = db.query(ClauseTag).filter(
+            ClauseTag.clause_id == request.clause_id,
+            ClauseTag.tag_id == tag.id
+        ).first()
+        
+        if existing_clause_tag:
+            return {
+                "success": True,
+                "message": f"Tag '{tag_name}' already exists on this clause",
+                "already_exists": True
+            }
+        
+        # 5. Create the clause_tag relationship
+        clause_tag = ClauseTag(
+            clause_id=request.clause_id,
+            tag_id=tag.id,
+            created_by=user_email,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(clause_tag)
+        db.commit()
+        
+        print(f"✅ Tag '{tag_name}' added to clause '{clause.clause_title}'")
+        
+        return {
+            "success": True,
+            "message": f"Tag '{tag_name}' added to clause",
+            "clause_id": request.clause_id,
+            "tag_id": tag.id,
+            "tag_name": tag_name,
+            "already_exists": False
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error adding tag to clause: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/clauses/library/tags/remove")
+async def remove_tag_from_clause(
+    request: ClauseTagRemove,
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a tag from a saved clause
+    """
+    try:
+        print(f"🗑️ Removing tag ID {request.tag_id} from clause ID {request.clause_id}")
+        
+        # 1. Verify the clause exists and belongs to the user
+        clause = db.query(ClauseLibrary).filter(
+            ClauseLibrary.id == request.clause_id,
+            ClauseLibrary.saved_by == user_email
+        ).first()
+        
+        if not clause:
+            raise HTTPException(
+                status_code=404, 
+                detail="Clause not found or you don't have permission"
+            )
+        
+        # 2. Verify the tag exists
+        tag = db.query(Tag).filter(Tag.id == request.tag_id).first()
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        
+        # 3. Find and remove the clause_tag relationship
+        clause_tag = db.query(ClauseTag).filter(
+            ClauseTag.clause_id == request.clause_id,
+            ClauseTag.tag_id == request.tag_id
+        ).first()
+        
+        if not clause_tag:
+            return {
+                "success": True,
+                "message": "Tag was not associated with this clause",
+                "already_removed": True
+            }
+        
+        db.delete(clause_tag)
+        db.commit()
+        
+        print(f"✅ Tag '{tag.name}' removed from clause '{clause.clause_title}'")
+        
+        return {
+            "success": True,
+            "message": f"Tag '{tag.name}' removed from clause",
+            "clause_id": request.clause_id,
+            "tag_id": request.tag_id,
+            "already_removed": False
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error removing tag from clause: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/clauses/library/{clause_id}/tags")
+async def get_clause_tags(
+    clause_id: int,
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all tags for a specific saved clause
+    """
+    try:
+        print(f"🔍 Getting tags for clause ID {clause_id}")
+        
+        # Verify the clause exists and belongs to the user
+        clause = db.query(ClauseLibrary).filter(
+            ClauseLibrary.id == clause_id,
+            ClauseLibrary.saved_by == user_email
+        ).first()
+        
+        if not clause:
+            raise HTTPException(
+                status_code=404, 
+                detail="Clause not found or you don't have permission"
+            )
+        
+        # Get all tags for this clause
+        clause_tags = db.query(ClauseTag, Tag).join(
+            Tag, ClauseTag.tag_id == Tag.id
+        ).filter(
+            ClauseTag.clause_id == clause_id
+        ).all()
+        
+        tags = [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "category": tag.category,
+                "added_at": clause_tag.created_at.isoformat() if clause_tag.created_at else None,
+                "added_by": clause_tag.created_by
+            }
+            for clause_tag, tag in clause_tags
+        ]
+        
+        return {
+            "clause_id": clause_id,
+            "clause_title": clause.clause_title,
+            "tags": tags,
+            "count": len(tags)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting clause tags: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/clauses/library/tags/all")
+async def get_all_clause_tags(
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all tags used across all saved clauses (for filtering dropdown)
+    """
+    try:
+        print(f"🔍 Getting all clause tags for user: {user_email}")
+        
+        # Get distinct tags used in user's clauses
+        clause_tags = db.query(Tag).join(ClauseTag).join(ClauseLibrary).filter(
+            ClauseLibrary.saved_by == user_email
+        ).distinct().all()
+        
+        tags = [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "category": tag.category,
+                "usage_count": db.query(ClauseTag).filter(ClauseTag.tag_id == tag.id).count()
+            }
+            for tag in clause_tags
+        ]
+        
+        # Sort by usage count (most used first)
+        tags.sort(key=lambda x: x["usage_count"], reverse=True)
+        
+        return {
+            "tags": tags,
+            "count": len(tags),
+            "user_email": user_email
+        }
+        
+    except Exception as e:
+        print(f"❌ Error getting all clause tags: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/clauses/library/filter/by-tag")
+async def filter_clauses_by_tag(
+    tag_id: int = Query(..., description="Tag ID to filter by"),
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Filter saved clauses by a specific tag
+    """
+    try:
+        print(f"🔍 Filtering clauses by tag ID {tag_id}")
+        
+        # Verify the tag exists
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        
+        # Get clauses that have this tag
+        clauses = db.query(ClauseLibrary).join(ClauseTag).filter(
+            ClauseLibrary.saved_by == user_email,
+            ClauseTag.tag_id == tag_id
+        ).order_by(ClauseLibrary.created_at.desc()).all()
+        
+        clause_list = []
+        
+        for clause in clauses:
+            # Get all tags for this clause
+            clause_tag_objs = db.query(ClauseTag, Tag).join(
+                Tag, ClauseTag.tag_id == Tag.id
+            ).filter(
+                ClauseTag.clause_id == clause.id
+            ).all()
+            
+            tags = [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "category": t.category
+                }
+                for _, t in clause_tag_objs
+            ]
+            
+            clause_list.append({
+                "id": clause.id,
+                "clause_title": clause.clause_title,
+                "section_number": clause.section_number,
+                "content_preview": (clause.clause_content[:200] + '...') if len(clause.clause_content) > 200 else clause.clause_content,
+                "tags": tags,
+                "saved_by": clause.saved_by,
+                "created_at": clause.created_at.isoformat() if clause.created_at else None
+            })
+        
+        return {
+            "tag": {
+                "id": tag.id,
+                "name": tag.name,
+                "category": tag.category
+            },
+            "clauses": clause_list,
+            "count": len(clause_list),
+            "user_email": user_email
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error filtering clauses by tag: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/clauses/library/filter/by-tag-name")
+async def filter_clauses_by_tag_name(
+    tag_name: str = Query(..., description="Tag name to filter by"),
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Filter saved clauses by a specific tag name
+    """
+    try:
+        print(f"🔍 Filtering clauses by tag name: '{tag_name}'")
+        
+        # Find the tag by name
+        tag = db.query(Tag).filter(Tag.name == tag_name).first()
+        if not tag:
+            return {
+                "tag_name": tag_name,
+                "clauses": [],
+                "count": 0,
+                "message": "No clauses found with this tag"
+            }
+        
+        # Get clauses that have this tag
+        clauses = db.query(ClauseLibrary).join(ClauseTag).filter(
+            ClauseLibrary.saved_by == user_email,
+            ClauseTag.tag_id == tag.id
+        ).order_by(ClauseLibrary.created_at.desc()).all()
+        
+        clause_list = []
+        
+        for clause in clauses:
+            # Get all tags for this clause
+            clause_tag_objs = db.query(ClauseTag, Tag).join(
+                Tag, ClauseTag.tag_id == Tag.id
+            ).filter(
+                ClauseTag.clause_id == clause.id
+            ).all()
+            
+            tags = [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "category": t.category
+                }
+                for _, t in clause_tag_objs
+            ]
+            
+            clause_list.append({
+                "id": clause.id,
+                "clause_title": clause.clause_title,
+                "section_number": clause.section_number,
+                "content_preview": (clause.clause_content[:200] + '...') if len(clause.clause_content) > 200 else clause.clause_content,
+                "tags": tags,
+                "saved_by": clause.saved_by,
+                "created_at": clause.created_at.isoformat() if clause.created_at else None
+            })
+        
+        return {
+            "tag": {
+                "id": tag.id,
+                "name": tag.name,
+                "category": tag.category
+            },
+            "clauses": clause_list,
+            "count": len(clause_list),
+            "user_email": user_email
+        }
+        
+    except Exception as e:
+        print(f"❌ Error filtering clauses by tag name: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/clauses/library/with-tags")
+async def get_clauses_with_tags(
+    user_email: str = Query(..., description="Current user's email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all saved clauses with their tags
+    """
+    try:
+        print(f"🔍 Getting all clauses with tags for user: {user_email}")
+        
+        # Get all clauses for the user
+        clauses = db.query(ClauseLibrary).filter(
+            ClauseLibrary.saved_by == user_email
+        ).order_by(ClauseLibrary.created_at.desc()).all()
+        
+        clause_list = []
+        
+        for clause in clauses:
+            # Get all tags for this clause
+            clause_tag_objs = db.query(ClauseTag, Tag).join(
+                Tag, ClauseTag.tag_id == Tag.id
+            ).filter(
+                ClauseTag.clause_id == clause.id
+            ).all()
+            
+            tags = [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "category": t.category
+                }
+                for _, t in clause_tag_objs
+            ]
+            
+            clause_list.append({
+                "id": clause.id,
+                "clause_title": clause.clause_title,
+                "section_number": clause.section_number,
+                "content_preview": (clause.clause_content[:200] + '...') if len(clause.clause_content) > 200 else clause.clause_content,
+                "tags": tags,
+                "tag_count": len(tags),
+                "saved_by": clause.saved_by,
+                "created_at": clause.created_at.isoformat() if clause.created_at else None
+            })
+        
+        return {
+            "clauses": clause_list,
+            "count": len(clause_list),
+            "user_email": user_email
+        }
+        
+    except Exception as e:
+        print(f"❌ Error getting clauses with tags: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 

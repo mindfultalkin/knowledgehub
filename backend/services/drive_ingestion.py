@@ -13,12 +13,13 @@ from models.metadata import (
     TaskType, 
     ProcessingStatus,
     Tag,
-    DocumentTag
+    DocumentTag,
+    ContentType  # ADDED THIS IMPORT
 )
 from tagging import SimpleTagger
 import hashlib
 import config
-import os  # FIXED: Added missing import
+import os
 
 # Add conditional imports for text extraction libraries
 try:
@@ -56,6 +57,7 @@ class DriveIngestionService:
         Sync all files from Google Drive to database
         ✅ Each user's files stored with their email
         ✅ ALWAYS creates tags for all files
+        ✅ NEW: Auto-detects templates from filename
         """
         print("🔄 Starting full sync from Google Drive (ALWAYS CREATE TAGS)...")
 
@@ -73,7 +75,8 @@ class DriveIngestionService:
             "total_files": 0,
             "new_files": 0,
             "updated_files": 0,
-            "tags_created": 0,  # NEW: Count of files that got tags
+            "templates_detected": 0,  # NEW: Count of template files
+            "tags_created": 0,
             "errors": 0,
             "skipped": 0
         }
@@ -103,6 +106,13 @@ class DriveIngestionService:
                             stats["tags_created"] += 1
                         elif result == "skipped":
                             stats["skipped"] += 1
+                        
+                        # Count templates
+                        if result in ["new", "updated_tags"]:
+                            file_name = file.get('name', '').lower()
+                            if any(keyword in file_name for keyword in ['template', 'templates']):
+                                stats["templates_detected"] += 1
+                                
                     except Exception as e:
                         print(f"❌ Error processing file: {e}")
                         stats["errors"] += 1
@@ -114,6 +124,7 @@ class DriveIngestionService:
             self._save_checkpoint(stats)
             print(f"🎉 Sync complete: {stats}")
             print(f"   📊 Tags created for {stats['tags_created']}/{stats['total_files']} files")
+            print(f"   📋 Templates detected: {stats['templates_detected']}")
             return stats
 
         except Exception as e:
@@ -125,11 +136,17 @@ class DriveIngestionService:
     def _process_file(self, file_data: Dict, account_email: str = None) -> str:
         """
         Process a single file - ALWAYS CREATE TAGS, even for unchanged files
+        ✅ NEW: Detects templates from filename and logs them
         """
         drive_file_id = file_data.get('id')
         file_name = file_data.get('name', 'Unknown')
         
-        print(f"📄 Processing file: {file_name}")
+        # ✅ LOG TEMPLATE DETECTION
+        file_name_lower = file_name.lower()
+        if any(keyword in file_name_lower for keyword in ['template', 'templates']):
+            print(f"📋 Processing TEMPLATE file: {file_name}")
+        else:
+            print(f"📄 Processing file: {file_name}")
         
         # Get modified time from Google Drive (but we'll ignore it for tagging)
         modified_time_str = file_data.get('modifiedTime')
@@ -172,15 +189,21 @@ class DriveIngestionService:
                     print(f"📝 File modified, updating metadata: {file_name}")
                     file_metadata = self._extract_metadata(file_data, account_email)
                     
+                    # Only update content_type if it's not set yet
+                    if existing_doc.content_type is None:
+                        existing_doc.content_type = file_metadata.get('content_type')
+                    
+                    # Update other fields
                     for key, value in file_metadata.items():
-                        setattr(existing_doc, key, value)
+                        if key != 'content_type':  # Don't override existing content_type
+                            setattr(existing_doc, key, value)
                     
                     existing_doc.db_updated_at = datetime.utcnow()
                     self.db.commit()
                 
                 # ⭐⭐⭐ ALWAYS CREATE TAGS - EVEN IF FILE UNCHANGED ⭐⭐⭐
                 print(f"🏷️  Creating content-based tags for: {file_name}")
-                # self._create_simple_tags(drive_file_id, file_data)
+                self._create_simple_tags(drive_file_id, file_data)
                 
                 # Queue processing tasks if file was modified or never processed
                 if not existing_doc.last_indexed_at or (drive_modified_at and existing_doc.modified_at and drive_modified_at > existing_doc.modified_at):
@@ -200,7 +223,7 @@ class DriveIngestionService:
                 
                 # ⭐⭐⭐ CREATE TAGS FOR NEW FILE ⭐⭐⭐
                 print(f"🏷️  Creating content-based tags for new file: {file_name}")
-                # self._create_simple_tags(drive_file_id, file_data)
+                self._create_simple_tags(drive_file_id, file_data)
                 
                 self._queue_processing_tasks(drive_file_id)
                 
@@ -378,6 +401,7 @@ class DriveIngestionService:
         """
         Extract metadata from Google Drive file data
         ✅ NEW: Include account_email to track which user this file belongs to
+        ✅ NEW: Detect template from filename and set content_type
         """
         # Parse timestamps
         created_time = file_data.get('createdTime')
@@ -405,6 +429,17 @@ class DriveIngestionService:
         file_name = file_data.get('name', '')
         file_format = self._get_file_extension(file_name)
 
+        # ✅ DETECT CONTENT TYPE FROM FILENAME
+        file_name_lower = file_name.lower()
+        
+        # Check for template keywords in filename
+        if any(keyword in file_name_lower for keyword in ['template', 'templates']):
+            content_type = ContentType.TEMPLATE
+            print(f"   📋 Detected as TEMPLATE: {file_name}")
+        else:
+            content_type = ContentType.OTHER
+            print(f"   📄 Detected as OTHER: {file_name}")
+
         # Create checksum
         checksum = hashlib.md5(
             f"{file_data.get('id')}{modified_time}".encode()
@@ -422,6 +457,8 @@ class DriveIngestionService:
             'file_url': file_data.get('webViewLink'),
             'thumbnail_link': file_data.get('thumbnailLink'),
             'icon_link': file_data.get('iconLink'),
+            # ✅ ADD CONTENT TYPE TO METADATA
+            'content_type': content_type,
             'created_at': created_at,
             'modified_at': modified_at,
             'status': 'active',
@@ -509,6 +546,17 @@ class DriveIngestionService:
     def get_sync_stats(self) -> Dict:
         """Get overall sync statistics"""
         total_docs = self.db.query(Document).count()
+        
+        # Count templates
+        templates = self.db.query(Document).filter(
+            Document.content_type == ContentType.TEMPLATE
+        ).count()
+        
+        # Count other documents
+        others = self.db.query(Document).filter(
+            Document.content_type == ContentType.OTHER
+        ).count()
+        
         pending_tasks = self.db.query(ProcessingQueue).filter(
             ProcessingQueue.status == ProcessingStatus.PENDING
         ).count()
@@ -523,6 +571,8 @@ class DriveIngestionService:
 
         return {
             'total_documents': total_docs,
+            'templates': templates,
+            'other_documents': others,
             'pending_tasks': pending_tasks,
             'processing_tasks': processing_tasks,
             'failed_tasks': failed_tasks,

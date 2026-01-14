@@ -4,6 +4,8 @@ Clause-related database models
 from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey
 from sqlalchemy.sql import func
 from database import Base
+from datetime import datetime
+from sqlalchemy import DateTime
 
 
 class DocumentClause(Base):
@@ -33,3 +35,24 @@ class ClauseLibrary(Base):
     saved_by = Column(String(255))
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+class ClauseTag(Base):
+    """Tags applied to saved clauses in clause library"""
+    __tablename__ = 'clause_tags'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    clause_id = Column(
+        Integer,
+        ForeignKey('clause_library.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    tag_id = Column(
+        Integer,
+        ForeignKey('tags.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(255), nullable=True)
