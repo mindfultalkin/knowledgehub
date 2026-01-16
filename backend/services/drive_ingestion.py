@@ -327,7 +327,8 @@ class DriveIngestionService:
         try:
             # Remove any existing tags first (clean slate)
             existing_tags = self.db.query(DocumentTag).filter(
-                DocumentTag.document_id == document_id
+                DocumentTag.document_id == document_id,
+                DocumentTag.source == 'content_analysis'
             ).all()
             for tag in existing_tags:
                 self.db.delete(tag)
