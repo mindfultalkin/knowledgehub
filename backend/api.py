@@ -1368,34 +1368,40 @@ async def extract_clauses(file_id: str, db: Session = Depends(get_db)):
 
         print(f"📄 Extracting clauses from: {document.title}")
         
-        # Extract content using existing content extractor
+        # Extract structured content
         from services.universal_content_extractor import UniversalContentExtractor
         content_extractor = UniversalContentExtractor(drive_client)
-        content = content_extractor.extract_content(file_id, document.mime_type or '')
-        
-        if not content:
+
+        blocks = content_extractor.extract_structured(
+            file_id,
+            document.mime_type or ''
+        )
+
+        if not blocks:
             return {
                 "message": "No content found in document",
                 "count": 0,
                 "clauses": []
             }
-        
-        # Extract clauses from content
+
+        #  FIX: capture returned clauses
         extractor = ClauseExtractor()
-        clauses = extractor.extract_clauses_from_content(content)
-        
+        clauses = extractor.extract_clauses_from_blocks(blocks)
+
         if not clauses:
             return {
                 "message": "No clauses found",
                 "count": 0,
                 "clauses": []
             }
-        
+
         # Clear old cached clauses for this document
-        db.query(DocumentClause).filter(DocumentClause.document_id == file_id).delete()
+        db.query(DocumentClause).filter(
+            DocumentClause.document_id == file_id
+        ).delete()
         db.commit()
-        
-        # Save to document_clauses table (temporary cache)
+
+        # Save clauses to cache
         for clause in clauses:
             doc_clause = DocumentClause(
                 document_id=file_id,
@@ -1405,11 +1411,11 @@ async def extract_clauses(file_id: str, db: Session = Depends(get_db)):
                 section_number=clause.get('section_number', '')
             )
             db.add(doc_clause)
-        
+
         db.commit()
-        print(f"✅ Saved {len(clauses)} clauses to cache")
-        
-        # Return clause list for display
+        print(f" Saved {len(clauses)} clauses to cache")
+
+        # Response for UI
         clause_list = [
             {
                 'clause_number': c['clause_number'],
@@ -1418,13 +1424,13 @@ async def extract_clauses(file_id: str, db: Session = Depends(get_db)):
             }
             for c in clauses
         ]
-                
+
         return {
             "message": f"Found {len(clauses)} clauses",
             "count": len(clauses),
             "clauses": clause_list
         }
-        
+
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
