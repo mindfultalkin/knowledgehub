@@ -203,7 +203,7 @@ class DriveIngestionService:
                 
                 # ⭐⭐⭐ ALWAYS CREATE TAGS - EVEN IF FILE UNCHANGED ⭐⭐⭐
                 print(f"🏷️  Creating content-based tags for: {file_name}")
-                # self._create_simple_tags(drive_file_id, file_data)
+                self._create_simple_tags(drive_file_id, file_data)
                 
                 # Queue processing tasks if file was modified or never processed
                 if not existing_doc.last_indexed_at or (drive_modified_at and existing_doc.modified_at and drive_modified_at > existing_doc.modified_at):
@@ -223,7 +223,7 @@ class DriveIngestionService:
                 
                 # ⭐⭐⭐ CREATE TAGS FOR NEW FILE ⭐⭐⭐
                 print(f"🏷️  Creating content-based tags for new file: {file_name}")
-                #self._create_simple_tags(drive_file_id, file_data)
+                self._create_simple_tags(drive_file_id, file_data)
                 
                 self._queue_processing_tasks(drive_file_id)
                 
