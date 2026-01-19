@@ -6,7 +6,7 @@
 // };
 
 
-// // For production deployment, comment out the above and uncomment below
+// For production deployment, comment out the above and uncomment below
 window.RUNTIME_ENV = {
   SERVICE_API_BASE_URL: 'https://knowledgehub-production-9572.up.railway.app/api',
   FRONTEND_URL: 'https://knowledgehub-production-9572.up.railway.app/',

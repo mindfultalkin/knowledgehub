@@ -46,7 +46,7 @@ async function showClauseLibrary() {
               type="text" 
               id="clauseSearchInput" 
               class="search-input" 
-              placeholder="Search clauses..."
+              placeholder="Search clauses by tags ..."
               onkeyup="window.filterClauses()"
             >
             <span class="search-icon">🔍</span>
@@ -316,25 +316,24 @@ function displayClauseLibrary(clauses) {
 }
 
 // Open clause modal (same API logic, simpler modal)
+// ✅ FIXED: Use existing list endpoint + find clause by ID
 async function openClauseModal(clauseId) {
   console.log('Opening modal for clause ID:', clauseId);
 
   try {
-    let userEmail =
-      window.appState.userEmail || localStorage.getItem('googleUserEmail');
+    let userEmail = window.appState.userEmail || localStorage.getItem('googleUserEmail');
     if (!userEmail) {
       window.showNotification('Please login first', 'error');
       return;
     }
 
-    const url = `${window.API_BASE_URL}/clauses/library?user_email=${encodeURIComponent(
-      userEmail
-    )}`;
+    // ✅ USE EXISTING LIST ENDPOINT (this works)
+    const url = `${window.API_BASE_URL}/clauses/library?user_email=${encodeURIComponent(userEmail)}`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to load clause details');
+    if (!response.ok) throw new Error('Failed to load clause library');
 
     const data = await response.json();
-    const clause = data.clauses.find((c) => c.id == clauseId);
+    const clause = data.clauses.find(c => c.id == clauseId);
 
     if (!clause) {
       window.showNotification('Clause not found', 'error');
@@ -344,144 +343,140 @@ async function openClauseModal(clauseId) {
     // Load tags for this clause
     let tags = [];
     try {
-      const tagsResponse = await fetch(
-        `${window.API_BASE_URL}/clauses/library/${clauseId}/tags?user_email=${encodeURIComponent(
-          userEmail
-        )}`
-      );
+      const tagsResponse = await fetch(`${window.API_BASE_URL}/clauses/library/${clauseId}/tags?user_email=${encodeURIComponent(userEmail)}`);
       if (tagsResponse.ok) {
         const tagsData = await tagsResponse.json();
         tags = tagsData.tags || [];
       }
     } catch (e) {
       console.warn('Could not load tags:', e);
+      tags = clause.tags || []; // Fallback to tags in clause object
     }
 
-    showClauseModal(clause, tags);
+    // Files section - Skip for now (no endpoint)
+    const containingFiles = []; 
+
+    showClauseModal(clause, tags, containingFiles);
   } catch (error) {
     console.error('❌ Error opening clause modal:', error);
     window.showNotification('Failed to load clause details', 'error');
   }
 }
 
+
+
 // Simplified clause modal: only title, content, tags, copy, close
-function showClauseModal(clause, tags) {
+function showClauseModal(clause, tags, containingFiles) {
   const modalOverlay = document.createElement('div');
   modalOverlay.className = 'modal-overlay';
   modalOverlay.id = 'clauseModal';
 
   const safeTitle = window.escapeHtml(clause.title || '');
-  const safeContent = window.escapeHtml(clause.content_preview || 'No content available');
+  const safeContent = window.escapeHtml(clause.content || clause.content_preview || 'No content available');
 
   modalOverlay.innerHTML = `
-    <div class="modal-container simple">
+    <div class="modal-container clause-modal">
       <!-- Header -->
       <div class="modal-header">
         <div class="modal-title-section">
           <h2 class="modal-title">${safeTitle}</h2>
+          ${clause.section_number ? `<span class="section-tag">${window.escapeHtml(clause.section_number)}</span>` : ''}
         </div>
-        <button class="modal-close-btn" onclick="window.closeClauseModal()" title="Close">
-          ×
-        </button>
+        <button class="modal-close-btn" onclick="window.closeClauseModal()" title="Close">×</button>
       </div>
 
       <!-- Body -->
       <div class="modal-body">
-        <!-- Clause content + copy -->
-        <div class="modal-section">
+        <!-- COMPLETE Clause Content (Scrollable) -->
+        <div class="modal-section full-content-section">
           <div class="section-header">
             <h3 class="section-title">Clause Content</h3>
-            <button 
-              class="btn-copy" 
-              onclick="window.copyClauseContent('${safeTitle}', \`${safeContent}\`)"
-            >
-              <span class="btn-icon">📋</span> Copy
+            <button class="copy-btn-perplexity" onclick="window.copyClauseContent('${safeTitle}', \`${safeContent}\`)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
             </button>
           </div>
-          <div class="content-container">
-            <div class="content-scroll">${safeContent}</div>
+          <div class="content-container scrollable-clause-content">
+            <div class="full-clause-content">${safeContent}</div>
           </div>
         </div>
 
-        <!-- Tags: inline add/remove + suggestions -->
+        <!-- Tags Section -->
         <div class="modal-section">
           <div class="section-header">
             <h3 class="section-title">Tags</h3>
           </div>
-
-          <div class="tags-list" id="modalTagsContainer">
-            ${
-              tags.length > 0
-                ? tags
-                    .map(
-                      (tag) => `
-                  <div class="tag-item">
-                    <span class="tag-name">${window.escapeHtml(tag.name)}</span>
-                    <button 
-                      class="tag-remove-btn" 
-                      onclick="window.removeClauseTag(${clause.id}, ${tag.id})" 
-                      title="Remove tag"
-                    >
-                      ×
-                    </button>
-                  </div>
-                `
-                    )
-                    .join('')
-                : '<p class="no-tags-message">No tags added yet</p>'
-            }
+          
+          <!-- Existing Tags -->
+          <div class="tags-display">
+            ${tags.length > 0 ? tags.map(tag => `
+              <span class="tag tag-bordered removable-tag" data-tag-id="${tag.id}">
+                ${window.escapeHtml(tag.name)}
+                <button class="tag-remove-btn-small" onclick="window.removeClauseTag(${clause.id}, ${tag.id})" title="Remove">×</button>
+              </span>
+            `).join('') : '<span class="no-tags">No tags added</span>'}
           </div>
 
-          <div class="add-tag-inline">
-            <div class="form-group">
-              <label for="tagInput" class="form-label">Add Tag</label>
-              <div class="add-tag-row">
-                <input
-                  type="text"
-                  id="tagInput"
-                  class="form-input"
-                  placeholder="Enter tag name..."
-                >
-                <button class="btn-primary btn-add-tag-inline" onclick="window.addTagToClause(${
-                  clause.id
-                })">
-                  Add
-                </button>
-              </div>
-            </div>
-
-            <div class="tag-suggestions">
-              <p class="suggestions-label">Common tags:</p>
-              <div class="suggestions-grid">
-                <button class="tag-suggestion" onclick="document.getElementById('tagInput').value = 'Confidentiality'">Confidentiality</button>
-                <button class="tag-suggestion" onclick="document.getElementById('tagInput').value = 'Termination'">Termination</button>
-                <button class="tag-suggestion" onclick="document.getElementById('tagInput').value = 'Indemnity'">Indemnity</button>
-                <button class="tag-suggestion" onclick="document.getElementById('tagInput').value = 'Liability'">Liability</button>
-                <button class="tag-suggestion" onclick="document.getElementById('tagInput').value = 'Payment'">Payment</button>
-                <button class="tag-suggestion" onclick="document.getElementById('tagInput').value = 'Warranty'">Warranty</button>
-              </div>
+          <!-- Add New Tag -->
+          <div class="add-tag-section">
+            <div class="add-tag-input-container">
+              <input type="text" id="tagInput" class="tag-input" placeholder="Type tag name and press Enter or click Add">
+              <button class="add-tag-btn" onclick="window.addTagToClause(${clause.id})">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
+
+        <!-- Files Containing This Clause -->
+        ${containingFiles.length > 0 ? `
+        <div class="modal-section">
+          <div class="section-header">
+            <h3 class="section-title">Files Containing This Clause (${containingFiles.length})</h3>
+          </div>
+          <div class="containing-files-list">
+            ${containingFiles.map(file => `
+              <div class="containing-file-item">
+                <span class="file-icon">📄</span>
+                <span class="file-name" title="${window.escapeHtml(file.name)}">${window.escapeHtml(file.name)}</span>
+                ${file.id ? `<a href="#" onclick="window.openFile('${file.id}'); return false;" class="file-link">Open File</a>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
       </div>
 
       <!-- Footer -->
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="window.closeClauseModal()">
-          Close
-        </button>
+        <button class="btn-secondary" onclick="window.closeClauseModal()">Close</button>
       </div>
     </div>
   `;
 
   document.body.appendChild(modalOverlay);
 
+  // Add Enter key support for tag input
+  const tagInput = document.getElementById('tagInput');
+  if (tagInput) {
+    tagInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        window.addTagToClause(clause.id);
+      }
+    });
+  }
+
+  // ESC to close
   const escHandler = (e) => {
     if (e.key === 'Escape') window.closeClauseModal();
   };
   document.addEventListener('keydown', escHandler);
   modalOverlay._escHandler = escHandler;
 }
+
 
 // Close clause modal
 function closeClauseModal() {

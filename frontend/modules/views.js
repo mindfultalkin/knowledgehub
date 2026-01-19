@@ -11,43 +11,26 @@ window.debounce = window.debounce || function(func, wait) {
 };
 
 // Render dashboard
-// Render dashboard - WITH TAG CLOUD
 function renderDashboard() {
+  // Sync stats - use cached values or defaults
   const stats = {
-    totalFiles: window.appState.files.length,
-    contracts: window.appState.files.filter(f => {
-      const name = f.name.toLowerCase();
-      const tags = (f.aiTags || []).map(t => t.toLowerCase());
-      return name.includes('contract') || 
-             name.includes('agreement') || 
-             tags.some(tag => tag.includes('contract') || tag.includes('agreement'));
-    }).length,
-    clauses: window.appState.files.filter(f => {
-      const name = f.name.toLowerCase();
-      const tags = (f.aiTags || []).map(t => t.toLowerCase());
-      return name.includes('clause') || 
-             tags.some(tag => tag.includes('clause'));
-    }).length,
-    practiceNotes: window.appState.files.filter(f => {
-      const name = f.name.toLowerCase();
-      const tags = (f.aiTags || []).map(t => t.toLowerCase());
-      return (name.includes('practice') && (name.includes('note') || name.includes('memo'))) || 
-             name.includes('practice note') ||
-             tags.some(tag => tag.includes('practice') && (tag.includes('note') || tag.includes('memo')));
-    }).length
+    totalFiles: window.appState.files?.length || 0,
+    templates: window.appState.templateCount || 0,
+    clauses: window.appState.clauseCount || 0, // From clause library API
+    practiceArea: 0 // As requested
   };
-  
+
   // TAG CLOUD DATA
   const allTags = {};
-  window.appState.files.forEach(file => {
+  window.appState.files?.forEach(file => {
     (file.aiTags || []).forEach(tag => {
       allTags[tag] = (allTags[tag] || 0) + 1;
     });
   });
   const sortedTags = Object.entries(allTags)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 12); // Top 12 tags
-  
+    .slice(0, 12);
+
   return `
     <div class="view-container">
       <div class="view-header">
@@ -66,7 +49,7 @@ function renderDashboard() {
           </div>
         </div>
       ` : `
-        <!-- Stats Grid -->
+        <!-- Stats Grid - UPDATED LABELS -->
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon file-icon"></div>
@@ -75,8 +58,8 @@ function renderDashboard() {
           </div>
           <div class="stat-card">
             <div class="stat-icon contract-icon"></div>
-            <div class="stat-number">${stats.contracts}</div>
-            <div class="stat-label">Contracts</div>
+            <div class="stat-number">${stats.templates}</div>
+            <div class="stat-label">Templates</div>
           </div>
           <div class="stat-card">
             <div class="stat-icon clause-icon"></div>
@@ -85,8 +68,8 @@ function renderDashboard() {
           </div>
           <div class="stat-card">
             <div class="stat-icon practice-icon"></div>
-            <div class="stat-number">${stats.practiceNotes}</div>
-            <div class="stat-label">Practice Notes</div>
+            <div class="stat-number">${stats.practiceArea}</div>
+            <div class="stat-label">Practice Area</div>
           </div>
         </div>
 
@@ -100,7 +83,7 @@ function renderDashboard() {
               <div><strong>Total Files:</strong> ${stats.totalFiles}</div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button class="action-button" onclick="window.refreshFiles()">Refresh</button>
-                <button class="action-button" onclick="window.uploadFiles()">Upload</button>
+                <button class="action-button" onclick="window.refreshDashboardStats()">Update Stats</button>
                 <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Record">Voice</button>
                 <button class="action-button" onclick="window.openNoteModal()">Note</button>
               </div>
@@ -239,27 +222,47 @@ function renderFiles() {
           <button class="connect-button" onclick="window.navigateTo('dashboard')">Go to Dashboard</button>
         </div>
       ` : window.appState.loading ? '<div class="loading"><div class="spinner"></div></div>' : `
-        <!-- VIEW TOGGLE BUTTONS -->
+        <!-- VIEW TOGGLE BUTTONS - GOOGLE DRIVE STYLE -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <div>
             <span id="filesCount" style="font-weight: 600; color: var(--primary-color);">
               ${sortedFiles.length} files 
             </span>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="action-button ${window.appState.filesView === 'grid' ? 'active-view-btn' : ''}" 
-                    onclick="window.toggleFilesView('grid')" title="Grid View">
-              Grid View
+          <div style="display: flex; gap: 4px; padding: 4px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
+            <!-- Grid View Icon (Active when grid) -->
+            <button class="view-toggle-btn ${window.appState.filesView !== 'list' ? 'active' : ''}" 
+                    onclick="window.toggleFilesView('grid')" title="Grid view">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+              </svg>
             </button>
-            <button class="action-button ${window.appState.filesView === 'list' ? 'active-view-btn' : ''}" 
-                    onclick="window.toggleFilesView('list')" title="List View">
-              List View
+            
+            <!-- List View Icon (Active when list) -->
+            <button class="view-toggle-btn ${window.appState.filesView === 'list' ? 'active' : ''}" 
+                    onclick="window.toggleFilesView('list')" title="List view">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 4h12"/>
+                <path d="M8 10h12"/>
+                <path d="M8 16h12"/>
+              </svg>
             </button>
-            <button class="action-button" onclick="window.refreshFiles()" style="background: var(--accent-color);">
+            
+            <div class="view-separator"></div>
+            
+            <!-- Refresh Button -->
+            <button class="action-button" onclick="window.refreshFiles()" style="background: var(--accent-color); padding: 6px 10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;">
+                <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
               Refresh
             </button>
           </div>
         </div>
+
 
         <!-- GRID VIEW -->
         ${window.appState.filesView !== 'list' ? `
@@ -347,25 +350,46 @@ function renderTemplates() {
           <button class="connect-button" onclick="window.navigateTo('dashboard')">Connect Drive</button>
         </div>
       ` : `
-        <!-- VIEW TOGGLE BUTTONS -->
+        <!-- VIEW TOGGLE BUTTONS - GOOGLE DRIVE STYLE -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <div>
             <span id="templateCount" style="font-weight: 600; color: var(--primary-color);">Loading...</span>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="action-button ${window.appState.filesView === 'grid' ? 'active-view-btn' : ''}" 
-                    onclick="window.toggleTemplatesView('grid')" title="Grid View">
-              Grid View
+          <div style="display: flex; gap: 4px; padding: 4px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
+            <!-- Grid View Icon -->
+            <button class="view-toggle-btn ${window.appState.filesView !== 'list' ? 'active' : ''}" 
+                    onclick="window.toggleTemplatesView('grid')" title="Grid view">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+              </svg>
             </button>
-            <button class="action-button ${window.appState.filesView === 'list' ? 'active-view-btn' : ''}" 
-                    onclick="window.toggleTemplatesView('list')" title="List View">
-              List View
+            
+            <!-- List View Icon -->
+            <button class="view-toggle-btn ${window.appState.filesView === 'list' ? 'active' : ''}" 
+                    onclick="window.toggleTemplatesView('list')" title="List view">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 4h12"/>
+                <path d="M8 10h12"/>
+                <path d="M8 16h12"/>
+              </svg>
             </button>
-            <button class="action-button" onclick="window.loadTemplates()" style="background: var(--accent-color);">
+            
+            <div class="view-separator"></div>
+            
+            <!-- Refresh Button -->
+            <button class="action-button" onclick="window.loadTemplates()" style="background: var(--accent-color); padding: 6px 10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;">
+                <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
               Refresh
             </button>
           </div>
         </div>
+
+
 
         <!-- FIXED: Search + Practice Area SIDE-BY-SIDE -->
         <div class="card mb-lg" style="padding: 20px;">
@@ -373,14 +397,14 @@ function renderTemplates() {
             <!-- Search - Left, wider -->
             <div style="flex: 2; min-width: 300px;">
               <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Search Templates</label>
-              <input type="text" id="templateSearch" placeholder="employment, NDA, service agreement..." 
+              <input type="text" id="templateSearch" placeholder="Search templates by tags..." 
                      style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
                      oninput="window.loadTemplatesDebounced()">
             </div>
             
             <!-- Practice Area - Right, compact -->
             <div style="flex: 1; min-width: 220px; max-width: 280px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">TAGS</label>
+              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Practice Area</label>
               <select id="practiceAreaFilter" 
                       style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
                       onchange="window.loadTemplates()">
@@ -417,12 +441,15 @@ window.loadTemplates = async function() {
 
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (practiceArea) params.set('practice_area', practiceArea);  // Backend expects 'practice_area'
+    if (practiceArea) params.set('practice_area', practiceArea);
 
     const response = await fetch(`${window.API_BASE_URL}/templates?${params}`);
     const data = await response.json();
 
     const countEl = document.getElementById('templateCount');
+
+    // ✅ CACHE TEMPLATE COUNT GLOBALLY
+    window.appState.templateCount = data.total || data.templates.length || 0;
 
     if (data.templates && data.templates.length > 0) {
       // GRID VIEW
@@ -457,10 +484,10 @@ window.loadTemplates = async function() {
       
       // UPDATE COUNTER
       if (countEl) {
-        countEl.textContent = `${data.total || data.templates.length} templates`;
+        countEl.textContent = `${window.appState.templateCount} templates`;
       }
       
-      // RE-POPULATE DROPDOWN (preserves selection)
+      // RE-POPULATE DROPDOWN
       if (practiceSelect && data.practice_areas && Array.isArray(data.practice_areas)) {
         const currentValue = practiceSelect.value;
         practiceSelect.innerHTML = `
@@ -479,6 +506,7 @@ window.loadTemplates = async function() {
         </div>
       `;
       if (countEl) countEl.textContent = '0 templates';
+      window.appState.templateCount = 0; // ✅ Cache 0 when empty
     }
   } catch (error) {
     console.error('Templates load error:', error);
@@ -492,8 +520,10 @@ window.loadTemplates = async function() {
         </div>
       `;
     }
+    window.appState.templateCount = 0; // ✅ Cache 0 on error
   }
 };
+
 
 // ADD THIS EXACTLY AFTER renderTemplates() function
 window.loadTemplatesDebounced = window.debounce(window.loadTemplates, 300);
@@ -664,6 +694,70 @@ document.addEventListener('change', function(e) {
     window.loadTemplates();
   }
 });
+
+
+// Fetch and update dashboard stats
+window.refreshDashboardStats = async function() {
+  try {
+    const userEmail = window.appState.userEmail || localStorage.getItem('googleUserEmail') || 'public';
+    
+    // Refresh clause count
+    const clauseResponse = await fetch(`${window.API_BASE_URL}/clauses/library?user_email=${encodeURIComponent(userEmail)}`);
+    let clauseCount = 0;
+    if (clauseResponse.ok) {
+      const clauseData = await clauseResponse.json();
+      clauseCount = clauseData.clauses?.length || 0;
+    }
+    
+    // Refresh template count
+    await window.refreshTemplateCount();
+    
+    // Cache values
+    window.appState.clauseCount = clauseCount;
+    
+    // Update DOM
+    const stats = document.querySelectorAll('.stat-number');
+    if (stats[1]) stats[1].textContent = window.appState.templateCount; // Templates
+    if (stats[2]) stats[2].textContent = clauseCount; // Clauses
+    
+    if (window.showNotification) {
+      window.showNotification(`Updated: ${window.appState.templateCount} templates, ${clauseCount} clauses`, 'success');
+    }
+  } catch (error) {
+    console.error('Failed to refresh stats:', error);
+  }
+};
+
+
+// Update dashboard template count from API
+window.refreshTemplateCount = async function() {
+  try {
+    const response = await fetch(`${window.API_BASE_URL}/templates`);
+    if (response.ok) {
+      const data = await response.json();
+      window.appState.templateCount = data.total || data.templates?.length || 0;
+      
+      // Update dashboard stat if visible
+      const templateStat = document.querySelector('.stat-card:nth-child(2) .stat-number');
+      if (templateStat) {
+        templateStat.textContent = window.appState.templateCount;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to refresh template count:', error);
+  }
+};
+
+
+// Auto-refresh stats on dashboard load
+window.updateDashboardOnLoad = function() {
+  setTimeout(() => {
+    if (window.appState.authenticated) {
+      window.refreshDashboardStats();
+    }
+  }, 500);
+};
+
 
 // Make functions globally available
 window.renderDashboard = renderDashboard;
