@@ -327,18 +327,20 @@ async function openClauseModal(clauseId) {
       return;
     }
 
-    // ✅ USE EXISTING LIST ENDPOINT (this works)
-    const url = `${window.API_BASE_URL}/clauses/library?user_email=${encodeURIComponent(userEmail)}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to load clause library');
+    // Fetch files and full clause content
+    const filesResponse = await fetch(`${window.API_BASE_URL}/clauses/library/${clauseId}/files`);
+    if (!filesResponse.ok) throw new Error('Failed to load files');
 
-    const data = await response.json();
-    const clause = data.clauses.find(c => c.id == clauseId);
+    const filesData = await filesResponse.json();
+    const clause = filesData; // This contains the full clause content
 
     if (!clause) {
       window.showNotification('Clause not found', 'error');
       return;
     }
+
+    // Filter files for exact match
+    const exactMatchFiles = filesData.files.filter(file => file.match_type === 'exact');
 
     // Load tags for this clause
     let tags = [];
@@ -350,13 +352,11 @@ async function openClauseModal(clauseId) {
       }
     } catch (e) {
       console.warn('Could not load tags:', e);
-      tags = clause.tags || []; // Fallback to tags in clause object
+      tags = [];
     }
 
-    // Files section - Skip for now (no endpoint)
-    const containingFiles = []; 
-
-    showClauseModal(clause, tags, containingFiles);
+    // Show modal with full content and exact match files
+    showClauseModal(clause, tags, exactMatchFiles);
   } catch (error) {
     console.error('❌ Error opening clause modal:', error);
     window.showNotification('Failed to load clause details', 'error');
@@ -365,14 +365,16 @@ async function openClauseModal(clauseId) {
 
 
 
+
+
 // Simplified clause modal: only title, content, tags, copy, close
-function showClauseModal(clause, tags, containingFiles) {
+function showClauseModal(clause, tags, exactMatchFiles) {
   const modalOverlay = document.createElement('div');
   modalOverlay.className = 'modal-overlay';
   modalOverlay.id = 'clauseModal';
 
-  const safeTitle = window.escapeHtml(clause.title || '');
-  const safeContent = window.escapeHtml(clause.content || clause.content_preview || 'No content available');
+  const safeTitle = window.escapeHtml(clause.clause_title || '');
+  const safeContent = window.escapeHtml(clause.clause_content || 'No content available');
 
   modalOverlay.innerHTML = `
     <div class="modal-container clause-modal">
@@ -387,7 +389,7 @@ function showClauseModal(clause, tags, containingFiles) {
 
       <!-- Body -->
       <div class="modal-body">
-        <!-- COMPLETE Clause Content (Scrollable) -->
+        <!-- COMPLETE Clause Content -->
         <div class="modal-section full-content-section">
           <div class="section-header">
             <h3 class="section-title">Clause Content</h3>
@@ -407,8 +409,6 @@ function showClauseModal(clause, tags, containingFiles) {
           <div class="section-header">
             <h3 class="section-title">Tags</h3>
           </div>
-          
-          <!-- Existing Tags -->
           <div class="tags-display">
             ${tags.length > 0 ? tags.map(tag => `
               <span class="tag tag-bordered removable-tag" data-tag-id="${tag.id}">
@@ -417,8 +417,6 @@ function showClauseModal(clause, tags, containingFiles) {
               </span>
             `).join('') : '<span class="no-tags">No tags added</span>'}
           </div>
-
-          <!-- Add New Tag -->
           <div class="add-tag-section">
             <div class="add-tag-input-container">
               <input type="text" id="tagInput" class="tag-input" placeholder="Type tag name and press Enter or click Add">
@@ -431,23 +429,22 @@ function showClauseModal(clause, tags, containingFiles) {
           </div>
         </div>
 
-        <!-- Files Containing This Clause -->
-        ${containingFiles.length > 0 ? `
+        ${exactMatchFiles.length > 0 ? `
         <div class="modal-section">
           <div class="section-header">
-            <h3 class="section-title">Files Containing This Clause (${containingFiles.length})</h3>
+            <h3 class="section-title">Files with Exact Match (${exactMatchFiles.length})</h3>
           </div>
           <div class="containing-files-list">
-            ${containingFiles.map(file => `
+            ${exactMatchFiles.map(file => `
               <div class="containing-file-item">
                 <span class="file-icon">📄</span>
-                <span class="file-name" title="${window.escapeHtml(file.name)}">${window.escapeHtml(file.name)}</span>
-                ${file.id ? `<a href="#" onclick="window.openFile('${file.id}'); return false;" class="file-link">Open File</a>` : ''}
+                <span class="file-name" title="${window.escapeHtml(file.title)}">${window.escapeHtml(file.title)}</span>
               </div>
             `).join('')}
           </div>
         </div>
         ` : ''}
+
       </div>
 
       <!-- Footer -->
@@ -476,6 +473,7 @@ function showClauseModal(clause, tags, containingFiles) {
   document.addEventListener('keydown', escHandler);
   modalOverlay._escHandler = escHandler;
 }
+
 
 
 // Close clause modal
