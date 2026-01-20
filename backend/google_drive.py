@@ -127,13 +127,19 @@ class GoogleDriveClient:
             print(f"❌ Error clearing credentials: {str(e)}")
     
     def build_service(self):
-        """Build Google Drive service"""
+        """Build Google Drive and Google Docs services"""
         try:
             if self.creds:
+                # Google Drive API
                 self.service = build('drive', 'v3', credentials=self.creds)
-                print("✅ Google Drive service built")
+
+                # Google Docs API ✅ ADD THIS
+                self.docs_service = build('docs', 'v1', credentials=self.creds)
+
+                print("✅ Google Drive & Docs services built")
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"❌ Error building services: {str(e)}")
+
     
     def list_files(self, page_size=100, page_token=None, query=None):
         """List files from Google Drive"""

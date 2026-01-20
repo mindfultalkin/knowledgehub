@@ -137,3 +137,48 @@ class ClauseExtractor:
                     return (True, '', line)
         
         return (False, '', '')
+    def extract_clauses_from_blocks(self, blocks: List[Dict]) -> List[Dict]:
+        """
+        Extract clauses from structured blocks (headings + paragraphs)
+        """
+        clauses = []
+        current_clause = None
+        clause_number = 0
+
+        for block in blocks:
+            block_type = block.get("type")
+            text = block.get("text", "").strip()
+            level = block.get("level")
+
+            if not text:
+                continue
+
+            # Start new clause on heading (H1 / H2)
+            if block_type == "heading":
+                if current_clause:
+                    current_clause["content"] = "\n".join(
+                        current_clause["content"]
+                    ).strip()
+                    clauses.append(current_clause)
+
+                clause_number += 1
+                current_clause = {
+                    "clause_number": clause_number,
+                    "section_number": str(clause_number),
+                    "title": text,
+                    "content": []
+                }
+
+            elif current_clause:
+                current_clause["content"].append(text)
+
+        # Save last clause
+        if current_clause:
+            current_clause["content"] = "\n".join(
+                current_clause["content"]
+            ).strip()
+            clauses.append(current_clause)
+
+        print(f"✅ Extracted {len(clauses)} clauses from structured blocks")
+        return clauses
+
