@@ -1,6 +1,13 @@
 // app.js - Main Application Entry Point (FIXED SYNTAX + DEFAULT LIST VIEW)
 console.log('Loading app.js...');
 
+window.IS_ADMIN = window.location.search.includes('admin');
+if (window.IS_ADMIN) {
+  console.log('Admin mode enabled');
+}
+
+
+
 // ✅ FIXED: Complete toggleFilesView function
 window.toggleFilesView = function(viewType) {
   window.appState.filesView = viewType || 'list'; // Default to list

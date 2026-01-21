@@ -417,6 +417,7 @@ function showClauseModal(clause, tags, exactMatchFiles) {
               </span>
             `).join('') : '<span class="no-tags">No tags added</span>'}
           </div>
+          ${window.IS_ADMIN ? `
           <div class="add-tag-section">
             <div class="add-tag-input-container">
               <input type="text" id="tagInput" class="tag-input" placeholder="Type tag name and press Enter or click Add">
@@ -427,6 +428,7 @@ function showClauseModal(clause, tags, exactMatchFiles) {
               </button>
             </div>
           </div>
+          ` : ''}
         </div>
 
         ${exactMatchFiles.length > 0 ? `

@@ -646,6 +646,7 @@ function updateTagsDisplay(documentId, tags) {
     tagsContainer.innerHTML = `
       <div class="tags-content">
         <em style="color:var(--text-secondary);font-size:0.85rem;">No tags yet</em>
+        ${window.IS_ADMIN ? `
         <button
           type="button"
           onclick="window.addTag('${documentId}')"
@@ -654,6 +655,7 @@ function updateTagsDisplay(documentId, tags) {
         >
           Add Tag
         </button>
+        ` : ''}
       </div>
     `;
     return;
@@ -664,6 +666,7 @@ function updateTagsDisplay(documentId, tags) {
       ${safeTags.map(tag => `
         <span class="tag">
           ${tag}
+          ${window.IS_ADMIN ? `
           <button
             type="button"
             onclick="window.removeTag('${documentId}', '${tag.replace(/'/g, "\\'")}')"
@@ -677,8 +680,10 @@ function updateTagsDisplay(documentId, tags) {
               font-size:0.95rem;
             "
           >×</button>
+          ` : ''}
         </span>
       `).join('')}
+      ${window.IS_ADMIN ? `
       <button
         type="button"
         onclick="window.addTag('${documentId}')"
@@ -687,6 +692,7 @@ function updateTagsDisplay(documentId, tags) {
       >
         Add Tag
       </button>
+      ` : ''}
     </div>
   `;
 }

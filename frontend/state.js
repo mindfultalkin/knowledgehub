@@ -15,7 +15,7 @@ const appState = {
   loading: false,
   theme: localStorage.getItem('theme') || 'light',
   gridSize: localStorage.getItem('gridSize') || 'medium',
-  filesPerPage: parseInt(localStorage.getItem('filesPerPage')) || 24,
+  filesPerPage: parseInt(localStorage.getItem('filesPerPage')) || 96,
   nlpSearchResults: [],
   nlpSearchQuery: '',
   nlpSearchLoading: false,

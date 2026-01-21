@@ -1,5 +1,6 @@
 // modules/views.js - View Rendering
 console.log('Loading views.js...');
+window.IS_ADMIN = window.location.search.includes('admin');
 
 // ADD THIS EXACTLY HERE - Line 3
 window.debounce = window.debounce || function(func, wait) {
@@ -81,12 +82,14 @@ function renderDashboard() {
               <div><strong>Account:</strong> ${window.appState.driveInfo.user?.email || 'Connected'}</div>
               <div><strong>Status:</strong> <span style="color: #4caf50;">Connected</span></div>
               <div><strong>Total Files:</strong> ${stats.totalFiles}</div>
+            ${window.IS_ADMIN ? `
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button class="action-button" onclick="window.refreshFiles()">Refresh</button>
                 <button class="action-button" onclick="window.refreshDashboardStats()">Update Stats</button>
                 <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Record">Voice</button>
                 <button class="action-button" onclick="window.openNoteModal()">Note</button>
               </div>
+            ` : ''}
             </div>
           </div>
         ` : ''}
@@ -606,22 +609,26 @@ function renderSettings() {
               <div><strong>Account:</strong> ${window.appState.driveInfo.user.email}</div>
               <div><strong>Display Name:</strong> ${window.appState.driveInfo.user.displayName || 'Not available'}</div>
             ` : ''}
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-              <button class="search-button" onclick="window.initiateGoogleAuth()" style="width: fit-content;">
-                Reconnect Drive
-              </button>
-              <button class="logout-button" onclick="window.logoutUser()" style="width: fit-content;">
-                Logout
-              </button>
-            </div>
+            ${window.IS_ADMIN ? `
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="search-button" onclick="window.initiateGoogleAuth()">
+                  Reconnect Drive
+                </button>
+                <button class="logout-button" onclick="window.logoutUser()">
+                  Logout
+                </button>
+              </div>
+            ` : ''}
           </div>
         ` : `
+          ${window.IS_ADMIN ? `
           <div>
             <p>Not connected to Google Drive</p>
             <button class="connect-button" onclick="window.initiateGoogleAuth()">
               Connect Now
             </button>
           </div>
+          ` : '<div><p>Google Drive connection is required.</p></div>'}
         `}
       </div>
       
