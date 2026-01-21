@@ -49,25 +49,33 @@ function renderDashboard() {
           </div>
         </div>
       ` : `
-        <!-- Stats Grid - UPDATED LABELS -->
+        <!-- Stats Grid - UPDATED WITH FONT AWESOME ICONS -->
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-icon file-icon"></div>
+            <div class="stat-icon" style="width: 36px; height: 36px; font-size: 1.25rem;">
+              <i class="fas fa-folder-open"></i>
+            </div>
             <div class="stat-number">${stats.totalFiles}</div>
             <div class="stat-label">Total Files</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon contract-icon"></div>
+            <div class="stat-icon" style="width: 36px; height: 36px; font-size: 1.25rem;">
+              <i class="fas fa-file-contract"></i>
+            </div>
             <div class="stat-number">${stats.templates}</div>
             <div class="stat-label">Templates</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon clause-icon"></div>
+            <div class="stat-icon" style="width: 36px; height: 36px; font-size: 1.25rem;">
+              <i class="fas fa-file-signature"></i>
+            </div>
             <div class="stat-number">${stats.clauses}</div>
             <div class="stat-label">Clauses</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon practice-icon"></div>
+            <div class="stat-icon" style="width: 36px; height: 36px; font-size: 1.25rem;">
+              <i class="fas fa-balance-scale"></i>
+            </div>
             <div class="stat-number">${stats.practiceArea}</div>
             <div class="stat-label">Practice Area</div>
           </div>
@@ -254,7 +262,7 @@ function renderFiles() {
             <div class="view-separator"></div>
             
             <!-- Refresh Button -->
-            <button class="action-button" onclick="window.refreshFiles()" style="background: var(--accent-color); padding: 6px 10px;">
+            <button class="action-button" onclick="window.refreshFiles()" style="background: white; color: black; padding: 6px 10px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;">
                 <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
               </svg>
@@ -380,7 +388,7 @@ function renderTemplates() {
             <div class="view-separator"></div>
             
             <!-- Refresh Button -->
-            <button class="action-button" onclick="window.loadTemplates()" style="background: var(--accent-color); padding: 6px 10px;">
+            <button class="action-button" onclick="window.loadTemplates()" style="background: white; color: black; padding: 6px 10px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;">
                 <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
               </svg>
