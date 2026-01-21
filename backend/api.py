@@ -1437,6 +1437,94 @@ async def extract_clauses(file_id: str, db: Session = Depends(get_db)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/documents/{file_id}/refetch-clauses")
+async def refetch_clauses(file_id: str, db: Session = Depends(get_db)):
+    """
+    Force re-extraction of clauses:
+    - Deletes existing cached clauses
+    - Extracts clauses again from source document
+    """
+    try:
+        if not drive_client or not drive_client.creds:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        # 1. Fetch document (supports Drive ID or internal ID)
+        document = _get_document_by_any_id(db, file_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        print(f"Re-fetching clauses for document: {document.title}")
+
+        # 2. Delete cached clauses
+        deleted_count = db.query(DocumentClause).filter(
+            DocumentClause.document_id == document.id
+        ).delete()
+
+        db.commit()
+        print(f"Deleted {deleted_count} cached clauses")
+
+        # 3. Extract structured content again
+        content_extractor = UniversalContentExtractor(drive_client)
+        blocks = content_extractor.extract_structured(
+            document.drive_file_id or document.id,
+            document.mime_type or ""
+        )
+
+        if not blocks:
+            return {
+                "message": "No content found during re-extraction",
+                "deleted": deleted_count,
+                "count": 0,
+                "clauses": []
+            }
+
+        # 4. Extract clauses from content blocks
+        extractor = ClauseExtractor()
+        clauses = extractor.extract_clauses_from_blocks(blocks)
+
+        if not clauses:
+            return {
+                "message": "No clauses found during re-extraction",
+                "deleted": deleted_count,
+                "count": 0,
+                "clauses": []
+            }
+
+        # 5. Save fresh clauses
+        for clause in clauses:
+            db.add(DocumentClause(
+                document_id=document.id,
+                clause_number=clause["clause_number"],
+                clause_title=clause["title"],
+                clause_content=clause["content"],
+                section_number=clause.get("section_number", "")
+            ))
+
+        db.commit()
+        print(f"Saved {len(clauses)} fresh clauses")
+
+        # 6. Return response for UI
+        return {
+            "message": "Clauses re-fetched successfully",
+            "deleted": deleted_count,
+            "count": len(clauses),
+            "clauses": [
+                {
+                    "clause_number": c["clause_number"],
+                    "section_number": c.get("section_number", str(c["clause_number"])),
+                    "title": c["title"]
+                }
+                for c in clauses
+            ]
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"Refetch error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/documents/{file_id}/clauses/{clause_number}")
 async def get_clause_content(file_id: str, clause_number: int, db: Session = Depends(get_db)):
