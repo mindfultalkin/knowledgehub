@@ -415,8 +415,10 @@ function showClauseModal(clause, tags, exactMatchFiles) {
             ${tags.length > 0 ? tags.map(tag => `
               <span class="tag tag-bordered removable-tag" data-tag-id="${tag.id}">
                 ${window.escapeHtml(tag.name)}
+                ${window.IS_ADMIN ? `
                 <button class="tag-remove-btn-small" onclick="window.removeClauseTag(${clause.id}, ${tag.id})" title="Remove">×</button>
-              </span>
+                ` : ''}
+                </span>
             `).join('') : '<span class="no-tags">No tags added</span>'}
           </div>
           ${window.IS_ADMIN ? `
