@@ -417,9 +417,9 @@ function renderTemplates() {
                      oninput="window.loadTemplatesDebounced()">
             </div>
             
-            <!-- Practice Area - Right, compact -->
+            <!--  - Right, compact -->
             <div style="flex: 1; min-width: 220px; max-width: 280px;">
-              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Practice Area</label>
+              <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem;">Tags</label>
               <select id="practiceAreaFilter" 
                       style="width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color, #ddd); font-size: 1rem; box-sizing: border-box;"
                       onchange="window.loadTemplates()">
@@ -506,7 +506,7 @@ window.loadTemplates = async function() {
       if (practiceSelect && data.practice_areas && Array.isArray(data.practice_areas)) {
         const currentValue = practiceSelect.value;
         practiceSelect.innerHTML = `
-          <option value="">All Areas (${data.practice_areas.length})</option>
+          <option value="">All Templates (${data.practice_areas.length})</option>
           ${data.practice_areas.map(area => 
             `<option value="${area}" ${area === currentValue ? 'selected' : ''}>${area}</option>`
           ).join('')}

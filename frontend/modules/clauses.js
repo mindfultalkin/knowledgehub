@@ -630,7 +630,7 @@ async function showTagFilterModal() {
     modalOverlay.innerHTML = `
       <div class="modal-container small">
         <div class="modal-header">
-          <h3 class="modal-title">Filter by Tags</h3>
+          <h3 class="modal-title" style="color: #ffffff;">Filter by Tags</h3>
           <button class="modal-close-btn" onclick="this.closest('.modal-overlay').remove()">
             ×
           </button>
@@ -643,17 +643,17 @@ async function showTagFilterModal() {
                   ? allTags
                       .map(
                         (tag) => `
-                    <label class="filter-option">
-                      <input 
-                        type="checkbox" 
-                        value="${tag.id}" 
-                        ${activeTagIds.includes(tag.id) ? 'checked' : ''}
-                        onchange="window.toggleTagFilter(${tag.id})"
-                        class="filter-checkbox"
-                      >
-                      <span class="filter-label">${window.escapeHtml(tag.name)}</span>
-                      <span class="filter-count">(${tag.usage_count || 0})</span>
-                    </label>
+                        <label class="filter-option" style="display:flex;align-items:center;gap:10px;">
+                          <input 
+                            type="checkbox"
+                            value="${tag.id}"
+                            ${activeTagIds.includes(tag.id) ? 'checked' : ''}
+                            onchange="window.toggleTagFilter(${tag.id})"
+                            style="margin:0;"
+                          >
+                          <span style="flex:1;">${window.escapeHtml(tag.name)}</span>
+                          <span style="opacity:0.7;">(${tag.usage_count || 0})</span>
+                        </label>
                   `
                       )
                       .join('')
