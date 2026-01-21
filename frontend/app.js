@@ -102,13 +102,13 @@ async function initApp() {
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="files" onclick="window.navigateTo('files')">
-              <span class="nav-icon"></span><span>Resource</span>
+              <span class="nav-icon"></span><span>Resources</span>
             </button>
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="search" onclick="window.navigateTo('search')">
               <span class="nav-icon"></span><span>Search</span>
-            </button>
+            </button> 
           </li>
           <li class="nav-item">
             <button class="nav-link" data-view="settings" onclick="window.navigateTo('settings')">
