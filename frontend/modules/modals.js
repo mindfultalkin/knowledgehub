@@ -230,17 +230,17 @@ async function displaySelectedClause(clause) {
       const data = await response.json();
       
       if (data.saved) {
-        saveBtn.textContent = 'Saved to Library';
+        saveBtn.textContent = 'Saved to Clause Library';
         saveBtn.classList.add('saved');
         saveBtn.disabled = true;
       } else {
-        saveBtn.textContent = 'Save to Library';
+        saveBtn.textContent = 'Save to Clause Library';
         saveBtn.classList.remove('saved');
         saveBtn.disabled = false;
       }
     } catch (error) {
       console.error('Error checking saved status:', error);
-      saveBtn.textContent = 'Save to Library';
+      saveBtn.textContent = 'Save to Clause Library';
       saveBtn.classList.remove('saved');
       saveBtn.disabled = false;
     }

@@ -106,11 +106,6 @@ async function initApp() {
             </button>
           </li>
           <li class="nav-item">
-            <button class="nav-link" data-view="search" onclick="window.navigateTo('search')">
-              <span class="nav-icon"></span><span>Search</span>
-            </button> 
-          </li>
-          <li class="nav-item">
             <button class="nav-link" data-view="settings" onclick="window.navigateTo('settings')">
               <span class="nav-icon"></span><span>Settings</span>
             </button>
@@ -122,7 +117,7 @@ async function initApp() {
     </div>
     
     <footer class="app-footer">
-      <p>Powered by Mindfultalk. All rights reserved.</p>
+      <p>Powered by Mindfultalk Consulting LLP. All rights reserved.</p>
     </footer>
   `;
   
