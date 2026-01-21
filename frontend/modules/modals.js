@@ -157,13 +157,65 @@ function displayClausesList(clauses) {
     return;
   }
   
-  container.innerHTML = clauses.map(clause => `
+  container.innerHTML = `
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+    <button class="btn-secondary" style="font-size:0.85rem;padding:6px 10px;"
+      onclick="window.refetchClausesNow()" title="Re-extract clauses"
+    >
+      ⟳ Refetch
+    </button>
+  </div>
+` + clauses.map(clause => `
       <div class="clause-item" onclick="window.selectClause(${clause.clause_number})" data-clause="${clause.clause_number}">
           <div class="clause-item-number">${clause.section_number || clause.clause_number}</div>
           <div class="clause-item-title">${clause.clause_title || clause.title}</div>
       </div>
   `).join('');
 }
+
+//Refetch Clauses List
+async function refetchClausesNow() {
+  const clausesList = document.getElementById('clausesList');
+  if (!clausesList) return;
+
+  if (!confirm('This will re-extract clauses again. Continue?')) return;
+
+  clausesList.innerHTML =
+    '<div class="loading-state">Re-extracting clauses... Please wait...</div>';
+
+  try {
+    const response = await fetch(
+      `${window.API_BASE_URL}/documents/${window.currentDocumentId}/refetch-clauses`,
+      { method: 'POST' }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to re-extract clauses');
+    }
+
+    window.currentClauses = data.clauses || [];
+    displayClausesList(window.currentClauses);
+
+    window.showNotification(
+      `Re-extracted ${data.count} clauses successfully`,
+      'success'
+    );
+  } catch (error) {
+    console.error('Refetch error:', error);
+    clausesList.innerHTML = `
+      <div class="empty-state" style="color:red;">
+        <p>Failed to re-extract clauses</p>
+        <p style="font-size:0.85rem;">${error.message}</p>
+        <button onclick="window.refetchClausesNow()" class="btn-primary">
+          Try Again
+        </button>
+      </div>
+    `;
+  }
+}
+
 
 // Select clause
 async function selectClause(clauseNumber) {
@@ -836,6 +888,7 @@ window.openDocumentModal = openDocumentModal;
 window.closeModal = closeModal;
 window.autoLoadCachedClauses = autoLoadCachedClauses;
 window.extractClausesNow = extractClausesNow;
+window.refetchClausesNow = refetchClausesNow;
 window.displayClausesList = displayClausesList;
 window.selectClause = selectClause;
 window.displaySelectedClause = displaySelectedClause;
