@@ -44,9 +44,11 @@ function renderDashboard() {
           <div class="auth-card">
             <h2>Connect to Your Google Drive</h2>
             <p>Click the button below to securely connect your Google Drive account.</p>
+            ${window.IS_ADMIN ? `
             <button class="connect-button" onclick="window.initiateGoogleAuth()">
               Connect to Google Drive
             </button>
+            ` : '<div style="color: red; font-weight: 600;">Contact admin to connect Google Drive.</div>'}
           </div>
         </div>
       ` : `
@@ -357,9 +359,11 @@ function renderTemplates() {
       </div>
       
       ${!window.appState.authenticated ? `
-        <div class="auth-container">
-          <button class="connect-button" onclick="window.navigateTo('dashboard')">Connect Drive</button>
-        </div>
+        ${window.IS_ADMIN ? `
+          <div class="auth-container">
+            <button class="connect-button" onclick="window.navigateTo('dashboard')">Connect Drive</button>
+          </div>
+        ` : '<div style="color: red; font-weight: 600; text-align: center;">Contact admin to connect Google Drive.</div>'}
       ` : `
         <!-- VIEW TOGGLE BUTTONS - GOOGLE DRIVE STYLE -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">

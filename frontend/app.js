@@ -1,7 +1,7 @@
 // app.js - Main Application Entry Point (FIXED SYNTAX + DEFAULT LIST VIEW)
 console.log('Loading app.js...');
 
-window.IS_ADMIN = window.location.search.includes('admin');
+window.IS_ADMIN = window.location.search.includes('connector');
 if (window.IS_ADMIN) {
   console.log('Admin mode enabled');
 }

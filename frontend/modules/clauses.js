@@ -17,10 +17,12 @@ async function showClauseLibrary() {
           <div class="auth-card">
             <div class="auth-icon"></div>
             <h2>Authentication Required</h2>
-            <p>Please connect to Google Drive to access your personal clause library.</p>
-            <button class="btn-primary" onclick="window.initiateGoogleAuth()">
-              <span class="btn-icon"></span> Connect to Google Drive
-            </button>
+            ${window.IS_ADMIN ? `
+              <p>Please connect to Google Drive to access your personal clause library.</p>
+              <button class="btn-primary" onclick="window.initiateGoogleAuth()">
+                <span class="btn-icon"></span> Connect to Google Drive
+              </button>
+            ` : '<div style="color: red; font-weight: 600;">Contact admin to connect Google Drive.</div>'}
           </div>
         </div>
       `;
