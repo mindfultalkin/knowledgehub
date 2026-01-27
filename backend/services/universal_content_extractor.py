@@ -175,7 +175,7 @@ class UniversalContentExtractor:
 
     def _extract_google_doc_structured(self, file_id: str):
         """
-        Extract headings and paragraphs from Google Docs
+        Extract Structured headings and paragraphs from Google Docs
         """
         doc = self.drive_client.docs_service.documents().get(
             documentId=file_id
@@ -218,7 +218,7 @@ class UniversalContentExtractor:
 
     def _extract_docx_structured(self, file_id: str):
         """
-        Extract headings and paragraphs from DOCX
+        Extract Structured headings and paragraphs from DOCX
         """
         import docx
 
