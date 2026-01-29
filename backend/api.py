@@ -40,6 +40,7 @@ from controllers.auth_controller import router as auth_router
 from controllers.system_controller import router as system_router
 from controllers.document_controller import router as document_router
 from controllers.clause_controller import router as clause_router
+from controllers.user_controller import router as user_router
 
 # Initialize router
 router = APIRouter()
@@ -47,6 +48,7 @@ router.include_router(auth_router)
 router.include_router(system_router)
 router.include_router(document_router)
 router.include_router(clause_router)
+router.include_router(user_router)
 
 
 
