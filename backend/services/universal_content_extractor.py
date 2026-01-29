@@ -172,7 +172,6 @@ class UniversalContentExtractor:
         
         return text.strip()
 
-
     def _extract_google_doc_structured(self, file_id: str):
         """
         Extract Structured headings and paragraphs from Google Docs
@@ -214,7 +213,6 @@ class UniversalContentExtractor:
 
         print(f"✅ Extracted {len(blocks)} structured blocks from Google Doc")
         return blocks
-
 
     def _extract_docx_structured(self, file_id: str):
         """

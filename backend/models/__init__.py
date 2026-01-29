@@ -1,3 +1,4 @@
+from models.user import User
 from models.clauses import DocumentClause, ClauseLibrary
 from models.metadata import (
     # Enums
@@ -18,6 +19,9 @@ from models.metadata import (
 )
 
 __all__ = [
+    # User
+    'User',
+    
     # Enums
     'ContentType',
     'ProcessingStatus',
