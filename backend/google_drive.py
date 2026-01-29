@@ -47,8 +47,7 @@ class GoogleDriveClient:
             # ✅ FORCE ACCOUNT SELECTION + CONSENT SCREEN
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
-                include_granted_scopes='true',
-                prompt='select_account consent'  # ✅ Always show account chooser
+                prompt='consent' 
             )
             
             print(f"✅ Authorization URL generated")

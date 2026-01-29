@@ -87,12 +87,11 @@ GOOGLE_AUTH_PROVIDER_CERT_URL = os.getenv("GOOGLE_AUTH_PROVIDER_CERT_URL", "http
 GOOGLE_REDIRECT_URIS = env_config["GOOGLE_REDIRECT_URIS"]
 
 # OAuth Scopes
-SCOPES = os.getenv(
-    "GOOGLE_SCOPES",
-    "https://www.googleapis.com/auth/drive.readonly,"
-    "https://www.googleapis.com/auth/drive.metadata.readonly,"
-    "https://www.googleapis.com/auth/documents.readonly"
-).split(",")
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive.metadata.readonly",
+    "https://www.googleapis.com/auth/documents"
+]
 
 
 # ----------------------------------------------------
