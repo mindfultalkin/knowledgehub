@@ -1,6 +1,8 @@
+import http
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 import os
 import sys
 import asyncio
@@ -17,6 +19,9 @@ from api import router
 from database import SessionLocal, Base, engine, init_database, get_db
 from sqlalchemy.orm import Session
 
+# ✅ IMPORT RISK ANALYSIS ROUTER
+from Risk_analysis_api import router as risk_router
+
 
 app = FastAPI(
     title="Knowledge Hub Backend",
@@ -26,19 +31,34 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
+# ✅ ADD THIS: Session Middleware (MUST BE BEFORE CORS)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="your-super-secret-key-change-this-in-production-min-32-chars",  # Change in production!
+    max_age=3600 * 24 * 7,  # 7 days
+    same_site="lax",
+    https_only=False  # Set to True in production with HTTPS
+)
 
 # CORS Setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=[
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+
 # ✅ API ROUTES FIRST (CRITICAL!)
 app.include_router(router, prefix="/api")
+
+# ✅ ADD RISK ANALYSIS ROUTER
+app.include_router(risk_router, prefix="/api", tags=["Risk Analysis"])
+
 
 
 # Health check with database status
@@ -55,6 +75,11 @@ async def health_check():
             "connected": db_ok,
             "host": MYSQL_HOST,
             "database": MYSQL_DATABASE
+        },
+        "features": {
+            "risk_analysis": "enabled",
+            "clause_extraction": "enabled",
+            "drive_integration": "enabled"
         }
     }
 
@@ -145,6 +170,8 @@ async def startup_event():
         asyncio.create_task(auto_extract_clauses_on_startup())
     else:
         print("⚠️  Application starting without database connection")
+    
+    print("✅ Risk Analysis API: Enabled")
 
 
 async def auto_extract_clauses_on_startup():
@@ -195,6 +222,8 @@ if __name__ == "__main__":
         print("✅ Google Drive credentials already loaded")
     else:
         print("ℹ️  Skipping auto-load - user must connect manually")
+    
+    print("✅ Risk Analysis API loaded")
     
     port = int(os.getenv("PORT", 8000))
     workers = int(os.getenv("WORKERS", 1))

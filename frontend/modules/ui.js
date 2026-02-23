@@ -14,10 +14,13 @@ function renderFileCard(file) {
     : '<span class="no-tags">No tags</span>';
 
   return `
-    <div class="file-card" data-file-id="${file.id}" data-file-name="${file.name}" data-file-type="${file.mimeType || file.type}">
+    <div class="file-card" 
+         data-file-id="${file.id}" 
+         data-file-name="${window.escapeHtml(file.name)}" 
+         data-file-type="${file.mimeType || file.type}">
       <div class="file-thumbnail">${icon}</div>
       <div class="file-info">
-        <div class="file-name" title="${file.name}">${file.name}</div>
+        <div class="file-name" title="${file.name}">${window.escapeHtml(file.name)}</div>
         <div class="file-meta">
           <span>Owner: ${file.owner}</span>
           <span>Date: ${window.formatDate(file.modifiedTime)}</span>
@@ -32,27 +35,52 @@ function renderFileCard(file) {
   `;
 }
 
-// Attach file card listeners (ORIGINAL - opens modal only)
-// Replace attachFileCardListeners() in ui.js
+// FIXED VERSION of attachFileCardListeners()
 function attachFileCardListeners() {
   // Grid cards
   document.querySelectorAll('.file-card').forEach(card => {
     card.style.cursor = 'pointer';
-    card.addEventListener('click', function() {
+    card.addEventListener('click', function(e) {
+      // Prevent clicks on child elements (like tags)
+      if (e.target.closest('.tag, .tag-badge, .file-tags')) {
+        return;
+      }
+      
       const fileId = this.dataset.fileId;
-      if (fileId && window.openDocumentModal) {
-        window.openDocumentModal(fileId, this.dataset.fileName, this.dataset.fileType);
+      const fileName = this.dataset.fileName;
+      const fileType = this.dataset.fileType;
+      
+      if (fileId && fileName && window.openDocumentModal) {
+        // ✅ FIXED: Pass all 3 parameters correctly
+        window.openDocumentModal(fileId, fileName, fileType);
+      } else {
+        console.error('Missing file data:', { fileId, fileName, fileType });
       }
     });
   });
   
-  // NEW: List rows
+  // List rows - FIXED VERSION
   document.querySelectorAll('.file-list-row').forEach(row => {
     row.style.cursor = 'pointer';
-    row.addEventListener('click', function() {
+    row.addEventListener('click', function(e) {
+      // Prevent clicks on child elements
+      if (e.target.closest('.tag, .tag-count, .tags-cell')) {
+        return;
+      }
+      
       const fileId = this.dataset.fileId;
-      if (fileId && window.openDocumentModal) {
-        window.openDocumentModal(fileId, row.querySelector('.name-cell .file-name')?.textContent);
+      
+      // Get file object from appState
+      let file;
+      if (window.currentView === 'templates') {
+        file = window.appState.templates?.find(t => t.id === fileId);
+      } else {
+        file = window.appState.files.find(f => f.id === fileId);
+      }
+      
+      if (file && window.openDocumentModal) {
+        // ✅ FIXED: Pass the file object's data
+        window.openDocumentModal(file.id, file.name, file.mimeType || file.type);
       }
     });
   });

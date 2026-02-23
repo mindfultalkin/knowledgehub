@@ -358,7 +358,7 @@ async function openClauseModal(clauseId) {
     }
 
     // Show modal with full content and exact match files
-    showClauseModal(clause, tags, exactMatchFiles);
+    showClauseModal(clause, tags, exactMatchFiles, clauseId);
   } catch (error) {
     console.error('❌ Error opening clause modal:', error);
     window.showNotification('Failed to load clause details', 'error');
@@ -370,10 +370,12 @@ async function openClauseModal(clauseId) {
 
 
 // Simplified clause modal: only title, content, tags, copy, close
-function showClauseModal(clause, tags, exactMatchFiles) {
+function showClauseModal(clause, tags, exactMatchFiles, clauseId) {
   const modalOverlay = document.createElement('div');
   modalOverlay.className = 'modal-overlay';
   modalOverlay.id = 'clauseModal';
+
+  document.body.classList.add('modal-open');
 
   const safeTitle = window.escapeHtml(clause.clause_title || '');
   const safeContent = window.escapeHtml(clause.clause_content || 'No content available');
@@ -416,7 +418,7 @@ function showClauseModal(clause, tags, exactMatchFiles) {
               <span class="tag tag-bordered removable-tag" data-tag-id="${tag.id}">
                 ${window.escapeHtml(tag.name)}
                 ${window.IS_ADMIN ? `
-                <button class="tag-remove-btn-small" onclick="window.removeClauseTag(${clause.id}, ${tag.id})" title="Remove">×</button>
+                <button class="tag-remove-btn-small" onclick="window.removeClauseTag(${clauseId}, ${tag.id})" title="Remove">×</button>
                 ` : ''}
                 </span>
             `).join('') : '<span class="no-tags">No tags added</span>'}
@@ -425,7 +427,7 @@ function showClauseModal(clause, tags, exactMatchFiles) {
           <div class="add-tag-section">
             <div class="add-tag-input-container">
               <input type="text" id="tagInput" class="tag-input" placeholder="Type tag name and press Enter or click Add">
-              <button class="add-tag-btn" onclick="window.addTagToClause(${clause.id})">
+              <button class="add-tag-btn" onclick="window.addTagToClause(${clauseId})">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                 </svg>
@@ -486,6 +488,9 @@ function showClauseModal(clause, tags, exactMatchFiles) {
 function closeClauseModal() {
   const modal = document.getElementById('clauseModal');
   if (modal) {
+    // Re-enable body scrolling
+    document.body.classList.remove('modal-open');
+    
     if (modal._escHandler) {
       document.removeEventListener('keydown', modal._escHandler);
     }

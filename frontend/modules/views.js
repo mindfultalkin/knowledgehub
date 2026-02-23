@@ -97,7 +97,7 @@ function renderDashboard() {
                 <button class="action-button" onclick="window.refreshFiles()">Refresh</button>
                 <button class="action-button" onclick="window.refreshDashboardStats()">Update Stats</button>
                 <button class="action-button voice-button" onclick="window.voiceRecord()" title="Voice Record">Voice</button>
-                <button class="action-button" onclick="window.openNoteModal()">Note</button>
+                <button class="action-button" onclick="window.openNoteModal()">Add Note</button>
               </div>
             ` : ''}
             </div>

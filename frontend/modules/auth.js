@@ -26,6 +26,19 @@ async function initiateGoogleAuth() {
   }
 }
 
+async function loadGoogleToken() {
+  try {
+    const res = await fetch(`${window.API_BASE_URL}/auth/token`);
+    if (!res.ok) return;
+
+    const data = await res.json();
+    window.googleAccessToken = data.access_token;
+
+    console.log('✅ Google access token loaded');
+  } catch (e) {
+    console.warn('Failed to load Google access token');
+  }
+}
 // Load files from Drive
 async function loadFiles() {
   if (!window.appState.authenticated) {
@@ -163,3 +176,4 @@ window.refreshFiles = refreshFiles;
 window.uploadFiles = uploadFiles;
 window.voiceRecord = voiceRecord;
 window.logoutUser = logoutUser;
+window.loadGoogleToken = loadGoogleToken;

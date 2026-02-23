@@ -28,3 +28,8 @@ pandas>=2.0.0
 packaging>=21.0
 cachetools>=4.2.0
 rsa>=4.7
+
+google-auth>=2.16.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.80.0
+itsdangerous>=2.0.0

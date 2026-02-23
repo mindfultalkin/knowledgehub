@@ -47,8 +47,8 @@ class GoogleDriveClient:
             # ✅ FORCE ACCOUNT SELECTION + CONSENT SCREEN
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
-                include_granted_scopes='true',
-                prompt='select_account consent'  # ✅ Always show account chooser
+                include_granted_scopes='false',
+                prompt='consent'  # ✅ Always show account chooser
             )
             
             print(f"✅ Authorization URL generated")
@@ -73,7 +73,7 @@ class GoogleDriveClient:
             
             # ✅ OPTIONAL: Save to .env (but don't auto-load on startup)
             # Comment out if you don't want to save at all
-            self.save_credentials_to_env()
+            #self.save_credentials_to_env()
             
             self.build_service()
             
@@ -84,22 +84,22 @@ class GoogleDriveClient:
             print(f"❌ Error: {str(e)}")
             raise
     
-    def save_credentials_to_env(self):
-        """Save credentials to .env (optional)"""
-        try:
-            if self.creds:
-                env_file = '.env'
-                set_key(env_file, 'GOOGLE_ACCESS_TOKEN', self.creds.token or '')
-                set_key(env_file, 'GOOGLE_REFRESH_TOKEN', self.creds.refresh_token or '')
+    # def save_credentials_to_env(self):
+    #     """Save credentials to .env (optional)"""
+    #     try:
+    #         if self.creds:
+    #             env_file = '.env'
+    #             set_key(env_file, 'GOOGLE_ACCESS_TOKEN', self.creds.token or '')
+    #             set_key(env_file, 'GOOGLE_REFRESH_TOKEN', self.creds.refresh_token or '')
                 
-                if self.creds.expiry:
-                    set_key(env_file, 'GOOGLE_TOKEN_EXPIRY', self.creds.expiry.isoformat())
+    #             if self.creds.expiry:
+    #                 set_key(env_file, 'GOOGLE_TOKEN_EXPIRY', self.creds.expiry.isoformat())
                 
-                print("✅ Credentials saved to .env")
-                load_dotenv(override=True)
+    #             print("✅ Credentials saved to .env")
+    #             load_dotenv(override=True)
                 
-        except Exception as e:
-            print(f"❌ Error saving: {str(e)}")
+    #     except Exception as e:
+    #         print(f"❌ Error saving: {str(e)}")
     
     def load_credentials(self):
         """

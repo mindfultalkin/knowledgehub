@@ -9,6 +9,14 @@ import asyncio
 from datetime import datetime
 from pydantic import BaseModel
 
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaInMemoryUpload
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+import json
 import config
 from database import get_db
 
@@ -639,6 +647,35 @@ async def google_auth():
     except Exception as e:
         print(f"❌ Error in google_auth: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/auth/google-config")
+def get_google_config():
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    api_key = os.getenv("GOOGLE_API_KEY")
+
+    if not client_id or not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Google Picker configuration missing"
+        )
+
+    return {
+        "client_id": client_id,
+        "api_key": api_key
+    }
+
+@router.get("/auth/token")
+def get_google_token():
+    # drive_client should already be created in your backend
+    if not drive_client or not drive_client.creds:
+        raise HTTPException(
+            status_code=401,
+            detail="Google Drive not connected"
+        )
+
+    return {
+        "access_token": drive_client.creds.token
+    }
 
 
 @router.get("/oauth2callback")
@@ -2500,6 +2537,169 @@ async def get_clauses_with_tags(
     except Exception as e:
         print(f"❌ Error getting clauses with tags: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================ADD Note end pointes ====================
+
+@router.post('/create-note')
+async def create_note(request: Request):
+    """
+    Create a Google Doc from note content
+    """
+    try:
+        # Get user session
+        session = request.session
+        if 'google_credentials' not in session:
+            return JSONResponse(
+                status_code=401,
+                content={'success': False, 'error': 'Not authenticated'}
+            )
+        
+        # Get request data
+        data = await request.json()
+        file_name = data.get('fileName', '').strip()
+        content = data.get('content', '').strip()
+        
+        # Validation
+        if not file_name:
+            return JSONResponse(
+                status_code=400,
+                content={'success': False, 'error': 'File name is required'}
+            )
+        
+        if not content:
+            return JSONResponse(
+                status_code=400,
+                content={'success': False, 'error': 'Content is required'}
+            )
+        
+        # Ensure filename ends with .docx (for Google Docs)
+        if not file_name.lower().endswith('.docx'):
+            file_name = f"{file_name}.docx"
+        
+        # Get credentials
+        creds_data = session['google_credentials']
+        creds = Credentials(
+            token=creds_data.get('token'),
+            refresh_token=creds_data.get('refresh_token'),
+            token_uri=creds_data.get('token_uri'),
+            client_id=creds_data.get('client_id'),
+            client_secret=creds_data.get('client_secret'),
+            scopes=creds_data.get('scopes')
+        )
+        
+        # Build Drive service
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # Create file metadata
+        file_metadata = {
+            'name': file_name,
+            'mimeType': 'application/vnd.google-apps.document'  # Google Docs MIME type
+        }
+        
+        # Convert content to Google Docs format
+        # For simple text, we can upload as plain text and let Google convert it
+        media = MediaInMemoryUpload(
+            content.encode('utf-8'),
+            mimetype='text/plain',
+            resumable=True
+        )
+        
+        # Create the file
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, name, webViewLink, createdTime'
+        ).execute()
+        
+        # Log the creation
+        print(f"✓ Created Google Doc: {file.get('name')} (ID: {file.get('id')})")
+        
+        return JSONResponse(
+            content={
+                'success': True,
+                'message': 'Note created successfully',
+                'fileId': file.get('id'),
+                'fileName': file.get('name'),
+                'webViewLink': file.get('webViewLink'),
+                'createdTime': file.get('createdTime')
+            }
+        )
+        
+    except Exception as e:
+        print(f"✗ Error creating note: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                'success': False,
+                'error': f'Failed to create note: {str(e)}'
+            }
+        )
+
+
+# Use this if you want to add formatting later
+@router.post('/create-note-formatted')
+async def create_note_formatted(request: Request):
+    try:
+        if not drive_client or not drive_client.creds:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        data = await request.json()
+        file_name = data.get('fileName', '').strip()
+        content = data.get('content', '').strip()
+
+        if not file_name or not content:
+            raise HTTPException(status_code=400, detail="File name and content required")
+
+        if not file_name.lower().endswith('.docx'):
+            file_name += '.docx'
+
+        # ✅ USE EXISTING CREDS
+        creds = drive_client.creds
+
+        print("🔥 FINAL SCOPES:", drive_client.creds.scopes)
+        drive_service = build('drive', 'v3', credentials=creds)
+        docs_service = build('docs', 'v1', credentials=creds)
+
+        file_metadata = {
+            'name': file_name,
+            'mimeType': 'application/vnd.google-apps.document'
+        }
+
+        file = drive_service.files().create(
+            body=file_metadata,
+            fields='id, name, webViewLink, createdTime'
+        ).execute()
+
+        doc_id = file['id']
+
+        docs_service.documents().batchUpdate(
+            documentId=doc_id,
+            body={
+                'requests': [{
+                    'insertText': {
+                        'location': {'index': 1},
+                        'text': content
+                    }
+                }]
+            }
+        ).execute()
+
+        return {
+            "success": True,
+            "fileId": doc_id,
+            "fileName": file['name'],
+            "webViewLink": file['webViewLink']
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
 
 
 

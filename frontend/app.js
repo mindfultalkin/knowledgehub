@@ -1,12 +1,10 @@
-// app.js - Main Application Entry Point (FIXED SYNTAX + DEFAULT LIST VIEW)
+// app.js - Main Application Entry Point (WITH RISK SCORE INTEGRATION)
 console.log('Loading app.js...');
 
 window.IS_ADMIN = window.location.search.includes('connector');
 if (window.IS_ADMIN) {
   console.log('Admin mode enabled');
 }
-
-
 
 // ✅ FIXED: Complete toggleFilesView function
 window.toggleFilesView = function(viewType) {
@@ -106,6 +104,11 @@ async function initApp() {
             </button>
           </li>
           <li class="nav-item">
+            <button class="nav-link" data-view="risk-score" onclick="window.navigateTo('risk-score')">
+              <span class="nav-icon"></span><span>Risk Score</span>
+            </button>
+          </li>
+          <li class="nav-item">
             <button class="nav-link" data-view="settings" onclick="window.navigateTo('settings')">
               <span class="nav-icon"></span><span>Settings</span>
             </button>
@@ -132,6 +135,7 @@ async function initApp() {
             <div class="status-dot"></div>
             <span>Connected to Google Drive</span>
           `;
+          if (window.loadGoogleToken) await window.loadGoogleToken();
           if (window.loadFiles) await window.loadFiles();
           if (window.loadDriveInfo) await window.loadDriveInfo();
         } else {
@@ -204,6 +208,7 @@ window.renderCurrentView = function() {
     case 'templates': window.showTemplatesView(); break;
     case 'clause-library': if (window.showClauseLibrary) window.showClauseLibrary(); break;
     case 'files': window.showFilesView(); break;
+    case 'risk-score': if (window.showRiskScoreView) window.showRiskScoreView(); break;
     case 'search': window.showSearchView(); break;
     case 'ai-tags': window.showAITagsView(); break;
     case 'settings': window.showSettingsView(); break;

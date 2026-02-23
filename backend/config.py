@@ -14,7 +14,7 @@ def get_environment_config():
         return {
             "SERVICE_API_BASE_URL": f"https://{railway_domain}/api",
             "FRONTEND_URL": f"https://{railway_domain}",
-            "ALLOWED_ORIGINS": [f"https://{railway_domain}", "*"],
+            "ALLOWED_ORIGINS": [f"https://{railway_domain}"],  # ✅ FIXED: Removed wildcard
             "GOOGLE_REDIRECT_URIS": f"https://{railway_domain}/api/oauth2callback"
         }
     
@@ -29,10 +29,19 @@ def get_environment_config():
         }
     
     # Local development (default)
+    # ✅ FIXED: Specific origins for development (no wildcard)
     return {
         "SERVICE_API_BASE_URL": "http://localhost:8000/api",
-        "FRONTEND_URL": "http://localhost:5500",
-        "ALLOWED_ORIGINS": ["http://localhost:5500", "http://127.0.0.1:5500", "*"],
+        "FRONTEND_URL": "http://localhost:5173",
+        "ALLOWED_ORIGINS": [
+            "http://localhost:5500",
+            "http://localhost:5501",
+            "http://127.0.0.1:5500",
+            "http://127.0.0.1:5501",
+            "http://localhost:3000",  # React dev server
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",  # React dev server
+        ],
         "GOOGLE_REDIRECT_URIS": "http://localhost:8000/api/oauth2callback"
     }
 
@@ -86,13 +95,13 @@ GOOGLE_AUTH_PROVIDER_CERT_URL = os.getenv("GOOGLE_AUTH_PROVIDER_CERT_URL", "http
 # Redirect URI - Use environment-specific redirect URI
 GOOGLE_REDIRECT_URIS = env_config["GOOGLE_REDIRECT_URIS"]
 
-# OAuth Scopes
-SCOPES = os.getenv(
-    "GOOGLE_SCOPES",
-    "https://www.googleapis.com/auth/drive.readonly,"
-    "https://www.googleapis.com/auth/drive.metadata.readonly,"
-    "https://www.googleapis.com/auth/documents.readonly"
-).split(",")
+# OAuth Scopes - ✅ ADDED: drive scope for creating documents
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/documents"
+]
+
 
 
 # ----------------------------------------------------
@@ -142,3 +151,4 @@ if __name__ == "__main__":
     print(f"Redirect URI: {GOOGLE_REDIRECT_URIS}")
     print(f"Allowed Origins: {ALLOWED_ORIGINS}")
     print(f"Database URL: {MYSQL_DATABASE_URL}")
+ 

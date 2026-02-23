@@ -17,6 +17,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <link rel="stylesheet" href="styles.css">
+    <!-- NEW: Risk Score Styles -->
+    <link rel="stylesheet" href="risk-score-styles.css">
 </head>
 <body>
     <div id="app-root"></div>
@@ -32,6 +34,8 @@
     <script src="modules/views.js"></script>
     <script src="modules/clauses.js"></script>
     <script src="modules/modals.js"></script>
+    <!-- NEW: Risk Score Module -->
+    <script src="modules/risk-score.js"></script>
     <script src="app.js"></script>
     
     <!-- Document Details Modal - ENHANCED LAW FIRM STYLE -->
@@ -137,5 +141,126 @@
             </div>
         </div>
     </div>
+
+    <!-- Note Creation Modal -->
+    <div id="noteModal" class="modal">
+        <div class="modal-overlay" onclick="window.closeNoteModal()"></div>
+        <div class="modal-content" style="max-width: 700px;">
+            <!-- Modal Header -->
+            <div class="modal-header" style="border-bottom: 2px solid var(--primary-color);">
+                <div>
+                    <h2 class="modal-title-serif">
+                        <i class="fas fa-sticky-note" style="color: var(--gold-accent);"></i>
+                        Create New Note
+                    </h2>
+                    <p class="modal-subtitle">Save directly to Google Drive as a Google Doc</p>
+                </div>
+                <button class="close-btn" onclick="window.closeNoteModal()" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="modal-body" style="padding: 2rem;">
+                <form onsubmit="event.preventDefault(); window.saveNoteToGoogleDrive();">
+                    <!-- File Name Input -->
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label for="noteFileName" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);">
+                            <i class="fas fa-file-signature"></i> Document Name
+                        </label>
+                        <input 
+                            type="text" 
+                            id="noteFileName" 
+                            class="form-input"
+                            placeholder="e.g., Meeting Notes, Legal Brief, Client Memo"
+                            required
+                            onkeypress="window.handleNoteKeyPress(event)"
+                            style="width: 100%; padding: 0.75rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; transition: all 0.3s ease;"
+                            onfocus="this.style.borderColor='var(--primary-color)'"
+                            onblur="this.style.borderColor='#e2e8f0'"
+                        />
+                        <small style="color: #718096; font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                            <i class="fas fa-info-circle"></i> Will be saved as "[Name].docx" in Google Drive
+                        </small>
+                    </div>
+                    
+                    <!-- Content Textarea -->
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label for="noteContent" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);">
+                            <i class="fas fa-align-left"></i> Content
+                        </label>
+                        <textarea 
+                            id="noteContent" 
+                            class="form-input"
+                            placeholder="Enter your note content here...&#10;&#10;• You can format this later in Google Docs&#10;• Supports multiple paragraphs&#10;• Add any text you need"
+                            required
+                            rows="12"
+                            style="width: 100%; padding: 0.75rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; font-family: 'Source Sans Pro', sans-serif; line-height: 1.6; resize: vertical; transition: all 0.3s ease;"
+                            onfocus="this.style.borderColor='var(--primary-color)'"
+                            onblur="this.style.borderColor='#e2e8f0'"
+                        ></textarea>
+                        <small style="color: #718096; font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                            <i class="fas fa-keyboard"></i> Tip: Use Shift+Enter for new lines
+                        </small>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="modal-footer" style="background: #f7fafc; border-top: 1px solid #e2e8f0; padding: 1.25rem 2rem;">
+                <button 
+                    onclick="window.closeNoteModal()" 
+                    class="btn-secondary"
+                    style="padding: 0.75rem 1.5rem; font-size: 1rem;"
+                >
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button 
+                    id="noteSaveBtn"
+                    onclick="window.saveNoteToGoogleDrive()" 
+                    class="btn-primary"
+                    style="padding: 0.75rem 2rem; font-size: 1rem; background: var(--primary-color); font-weight: 600;"
+                >
+                    <i class="fas fa-save"></i> Create & Save to Drive
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Note Modal Specific Styles */
+        #noteModal .form-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(26, 54, 93, 0.1);
+        }
+
+        #noteModal .modal-content {
+            animation: slideUpFade 0.3s ease-out;
+        }
+
+        @keyframes slideUpFade {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #noteModal textarea {
+            font-family: 'Source Sans Pro', 'Segoe UI', sans-serif;
+        }
+
+        #noteModal .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(26, 54, 93, 0.3);
+        }
+
+        #noteModal .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+    </style>
 </body>
 </html>

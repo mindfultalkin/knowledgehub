@@ -216,7 +216,6 @@ async function refetchClausesNow() {
   }
 }
 
-
 // Select clause
 async function selectClause(clauseNumber) {
   window.selectedClauseNumber = clauseNumber;
@@ -372,7 +371,6 @@ async function saveClauseToLibrary() {
     saveBtn.classList.remove('saved');
   }
 }
-
 
 // Find similar files
 async function findSimilarFiles(clauseTitle) {
@@ -687,7 +685,6 @@ async function removeTag(documentId, tag) {
   }
 }
 
-
 function updateTagsDisplay(documentId, tags) {
   const tagsContainer = document.getElementById('tagsContainer');
   if (!tagsContainer) return;
@@ -749,76 +746,166 @@ function updateTagsDisplay(documentId, tags) {
   `;
 }
 
-// Note modal functions
+// ==========================================
+// FIXED openNoteModal Function
+// ==========================================
+
+// Open Note Modal - FIXED VERSION
 function openNoteModal() {
   console.log('openNoteModal called');
-
-  const existing = document.getElementById('noteModal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'modal';
-  modal.id = 'noteModal';
-
-  modal.innerHTML = `
-    <div class="modal-overlay" onclick="window.closeNoteModal()"></div>
-    <div class="modal-content" style="max-width:600px;">
-      <div class="modal-header">
-        <h2>Add Note</h2>
-        <button class="close-btn" onclick="window.closeNoteModal()">×</button>
-      </div>
-      <div class="modal-body">
-        <label>Title</label>
-        <input id="noteTitle" class="input" placeholder="Enter note title" />
-
-        <label style="margin-top:1rem;">Content</label>
-        <textarea id="noteContent" class="textarea" rows="8"
-          placeholder="Type your note here..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="window.closeNoteModal()">Cancel</button>
-        <button class="btn-primary" onclick="window.saveNote()">Save Note</button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-}
-
-function closeNoteModal() {
+  
   const modal = document.getElementById('noteModal');
-  if (modal) modal.remove();
-}
-
-async function saveNote() {
-  const title = (document.getElementById('noteTitle')?.value || '').trim();
-  const content = document.getElementById('noteContent')?.value || '';
-
-  if (!title) {
-    window.showNotification('Title is required', 'error');
+  
+  if (!modal) {
+    console.error('❌ noteModal element not found in DOM!');
+    alert('Error: Note modal not found. Please refresh the page.');
     return;
   }
-
-  try {
-    window.showNotification('Creating note...', 'info');
-
-    const res = await fetch(`${window.API_BASE_URL}/notes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, content }),
-    });
-
-    if (!res.ok) throw new Error(`Failed (${res.status})`);
-    await res.json();
-
-    window.showNotification('Note created', 'success');
-    window.closeNoteModal();
-    if (window.refreshFiles) {
-      await window.refreshFiles();
+  
+  console.log('✅ Modal element found:', modal);
+  
+  // Reset form
+  const fileNameInput = document.getElementById('noteFileName');
+  const contentInput = document.getElementById('noteContent');
+  const saveBtn = document.getElementById('noteSaveBtn');
+  
+  if (fileNameInput) fileNameInput.value = '';
+  if (contentInput) contentInput.value = '';
+  if (saveBtn) saveBtn.disabled = false;
+  
+  // FORCE the modal to display
+  modal.style.display = 'flex';
+  modal.style.position = 'fixed';
+  modal.style.top = '0';
+  modal.style.left = '0';
+  modal.style.width = '100%';
+  modal.style.height = '100%';
+  modal.style.zIndex = '10000';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  
+  console.log('✅ Modal display set to:', modal.style.display);
+  console.log('✅ Modal computed display:', window.getComputedStyle(modal).display);
+  
+  // Focus on file name input after a brief delay
+  setTimeout(() => {
+    if (fileNameInput) {
+      fileNameInput.focus();
+      console.log('✅ Input focused');
     }
-  } catch (e) {
-    console.error('Create note error', e);
-    window.showNotification('Failed to create note', 'error');
+  }, 100);
+  
+  console.log('✅ Modal should now be visible');
+}
+
+// Close Note Modal
+function closeNoteModal() {
+  console.log('closeNoteModal called');
+  const modal = document.getElementById('noteModal');
+  if (modal) {
+    modal.style.display = 'none';
+    console.log('✅ Modal closed');
+  }
+}
+
+// Save Note to Google Drive
+// Save Note to Google Drive - FIXED VERSION
+async function saveNoteToGoogleDrive() {
+  console.log('saveNoteToGoogleDrive called');
+  
+  const fileName = document.getElementById('noteFileName').value.trim();
+  const content = document.getElementById('noteContent').value.trim();
+  
+  // Validation
+  if (!fileName) {
+    if (window.showNotification) {
+      window.showNotification('Please enter a file name', 'error');
+    } else {
+      alert('Please enter a file name');
+    }
+    return;
+  }
+  
+  if (!content) {
+    if (window.showNotification) {
+      window.showNotification('Please enter some content', 'error');
+    } else {
+      alert('Please enter some content');
+    }
+    return;
+  }
+  
+  // Disable save button to prevent double submission
+  const saveBtn = document.getElementById('noteSaveBtn');
+  const originalText = saveBtn.innerHTML;
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+  
+  try {
+    console.log('Calling API to create note...');
+    
+    // ✅ FIX: Changed endpoint from /create-note to /create-note-formatted
+    const response = await fetch(`${window.API_BASE_URL}/create-note-formatted`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',  // ✅ FIX: Added to send session cookies
+      body: JSON.stringify({
+        fileName: fileName,
+        content: content
+      })
+    });
+    
+    console.log('API Response status:', response.status);
+    
+    const data = await response.json();
+    console.log('API Response data:', data);
+    
+    if (response.ok && data.success) {
+      if (window.showNotification) {
+        window.showNotification(`Note "${fileName}" created successfully!`, 'success');
+      } else {
+        alert(`Note "${fileName}" created successfully!`);
+      }
+      
+      // Close modal
+      closeNoteModal();
+      
+      // Refresh files list to show the new note
+      if (window.refreshFiles) {
+        setTimeout(() => window.refreshFiles(), 500);
+      }
+      
+      // If user wants to open the file in Drive
+      if (data.fileId) {
+        const openInDrive = confirm('Note created! Would you like to open it in Google Drive?');
+        if (openInDrive) {
+          window.open(`https://docs.google.com/document/d/${data.fileId}/edit`, '_blank');
+        }
+      }
+    } else {
+      throw new Error(data.error || 'Failed to create note');
+    }
+  } catch (error) {
+    console.error('Error creating note:', error);
+    if (window.showNotification) {
+      window.showNotification(`Error: ${error.message}`, 'error');
+    } else {
+      alert(`Error: ${error.message}`);
+    }
+  } finally {
+    // Re-enable button
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = originalText;
+  }
+}
+
+// Handle Enter key in note modal
+function handleNoteKeyPress(event) {
+  if (event.key === 'Enter' && !event.shiftKey && event.target.id === 'noteFileName') {
+    event.preventDefault();
+    document.getElementById('noteContent').focus();
   }
 }
 
@@ -851,6 +938,7 @@ window.addTag = async function(documentId) {
     window.showNotification('Failed to add tag', 'error');
   }
 };
+
 window.removeTag = async function(documentId, tag) {
   if (!confirm(`Remove tag "${tag}"?`)) return;
 
@@ -881,8 +969,6 @@ window.removeTag = async function(documentId, tag) {
   }
 };
 
-
-
 // Make functions globally available
 window.openDocumentModal = openDocumentModal;
 window.closeModal = closeModal;
@@ -907,4 +993,7 @@ window.removeTag = removeTag;
 window.updateTagsDisplay = updateTagsDisplay;
 window.openNoteModal = openNoteModal;
 window.closeNoteModal = closeNoteModal;
-window.saveNote = saveNote;
+window.saveNoteToGoogleDrive = saveNoteToGoogleDrive;
+window.handleNoteKeyPress = handleNoteKeyPress;
+
+console.log('✅ Note modal functions loaded');
