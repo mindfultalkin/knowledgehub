@@ -50,7 +50,6 @@ async def oauth2callback(code: str, state: str = None):
         drive_client.exchange_code_for_credentials(code, config.GOOGLE_REDIRECT_URIS)
         print("✅ OAuth credentials obtained successfully")
         
-        # Try database sync, but don't fail if database is unavailable
         try:
             from database import get_db_context
             from services.drive_ingestion import DriveIngestionService
@@ -61,21 +60,21 @@ async def oauth2callback(code: str, state: str = None):
                 stats = ingestion_service.sync_all_files()
                 print(f"✅ Auto-sync completed: {stats}")
                 
-            # Trigger clause extraction
             print("🔄 Triggering clause extraction...")
             asyncio.create_task(trigger_post_auth_extraction())
             
         except Exception as sync_error:
             print(f"⚠️ Auto-sync failed (non-critical): {sync_error}")
-            # Continue anyway - user is authenticated
         
-        return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=success")
+        # ✅ CHANGED: /drive-auth?auth=success instead of /?auth=success
+        return RedirectResponse(url=f"{config.FRONTEND_URL}/drive-auth?auth=success")
         
     except Exception as e:
         print(f"❌ OAuth callback error: {e}")
         import traceback
         traceback.print_exc()
-        return RedirectResponse(url=f"{config.FRONTEND_URL}?auth=error&message={str(e)}")
+        # ✅ CHANGED: /drive-auth?auth=error instead of /?auth=error
+        return RedirectResponse(url=f"{config.FRONTEND_URL}/drive-auth?auth=error&message={str(e)}")
 
 
 @router.post("/auth/logout")
