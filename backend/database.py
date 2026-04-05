@@ -9,6 +9,9 @@ import time
 import os
 import logging
 from urllib.parse import quote_plus
+from dotenv import load_dotenv
+load_dotenv()
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

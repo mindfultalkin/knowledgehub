@@ -31,8 +31,8 @@ def get_environment_config():
     # Local development (default)
     return {
         "SERVICE_API_BASE_URL": "http://localhost:8000/api",
-        "FRONTEND_URL": "http://localhost:5500",
-        "ALLOWED_ORIGINS": ["http://localhost:5500", "http://127.0.0.1:5500", "*"],
+        "FRONTEND_URL": "http://localhost:5173",
+        "ALLOWED_ORIGINS": ["http://localhost:5173", "http://127.0.0.1:5173",],
         "GOOGLE_REDIRECT_URIS": "http://localhost:8000/api/oauth2callback"
     }
 
