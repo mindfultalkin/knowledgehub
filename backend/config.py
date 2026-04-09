@@ -13,7 +13,7 @@ def get_environment_config():
         # Railway deployment
         return {
             "SERVICE_API_BASE_URL": f"https://{railway_domain}/api",
-            "FRONTEND_URL": f"https://{railway_domain}",
+            "FRONTEND_URL": "https://knowledgehub-reactjs.vercel.app",
             "ALLOWED_ORIGINS": [f"https://{railway_domain}", "*"],
             "GOOGLE_REDIRECT_URIS": f"https://{railway_domain}/api/oauth2callback"
         }
@@ -23,7 +23,7 @@ def get_environment_config():
     if is_production:
         return {
             "SERVICE_API_BASE_URL": "https://knowledgehub-production-9572.up.railway.app/api",
-            "FRONTEND_URL": "https://knowledgehub-production-9572.up.railway.app",
+            "FRONTEND_URL": "https://knowledgehub-reactjs.vercel.app",
             "ALLOWED_ORIGINS": ["https://knowledgehub-production-9572.up.railway.app"],
             "GOOGLE_REDIRECT_URIS": "https://knowledgehub-production-9572.up.railway.app/api/oauth2callback"
         }

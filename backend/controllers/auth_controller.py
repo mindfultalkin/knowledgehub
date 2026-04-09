@@ -67,14 +67,14 @@ async def oauth2callback(code: str, state: str = None):
             print(f"⚠️ Auto-sync failed (non-critical): {sync_error}")
         
         # ✅ CHANGED: /drive-auth?auth=success instead of /?auth=success
-        return RedirectResponse(url=f"{config.FRONTEND_URL}/drive-auth?auth=success")
+        return RedirectResponse(url=f"{config.FRONTEND_URL}/dashboard")
         
     except Exception as e:
         print(f"❌ OAuth callback error: {e}")
         import traceback
         traceback.print_exc()
         # ✅ CHANGED: /drive-auth?auth=error instead of /?auth=error
-        return RedirectResponse(url=f"{config.FRONTEND_URL}/drive-auth?auth=error&message={str(e)}")
+        return RedirectResponse(url=f"{config.FRONTEND_URL}/drive-auth?auth=error")
 
 
 @router.post("/auth/logout")
