@@ -46,15 +46,52 @@ def get_current_user_email():
         print(f"⚠️ Error getting current user: {e}")
         return None
 
+def _get_document_by_any_id(db: Session, document_id: str):
+    from models.metadata import Document
+    from core.google_client import drive_client
+    from services.drive_ingestion import DriveIngestionService
 
-def _get_document_by_any_id(db: Session, doc_id: str):
-    """
-    Fetch document by internal ID or Google Drive file ID
-    """
-    doc = db.query(Document).filter(Document.id == doc_id).first()
+    # 1️⃣ Try DB id
+    doc = db.query(Document).filter(Document.id == document_id).first()
     if doc:
         return doc
-    return db.query(Document).filter(Document.drive_file_id == doc_id).first()
+
+    # 2️⃣ Try drive_file_id
+    doc = db.query(Document).filter(Document.drive_file_id == document_id).first()
+    if doc:
+        return doc
+
+    # 🔥 3️⃣ FORCE SYNC
+    try:
+        print(f"🔄 Syncing missing document: {document_id}")
+        ingestion = DriveIngestionService(drive_client, db)
+        ingestion.sync_all_files()
+
+        # Try again
+        doc = db.query(Document).filter(Document.drive_file_id == document_id).first()
+        if doc:
+            print("✅ Found after sync")
+            return doc
+
+        # 🔥🔥🔥 NEW FIX: CREATE DOCUMENT MANUALLY
+        print("⚠️ Not found even after sync, creating manually...")
+
+        file_data = drive_client.get_file(document_id)
+
+        metadata = ingestion._extract_metadata(file_data, account_email=None)
+
+        new_doc = Document(**metadata)
+        db.add(new_doc)
+        db.commit()
+
+        print("✅ Document manually created in DB")
+
+        return new_doc
+
+    except Exception as e:
+        print(f"❌ FINAL FAIL: {e}")
+
+    return None
 
 
 def _load_tags_from_doc(doc, db: Session):
@@ -110,37 +147,38 @@ async def get_all_documents(
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
-    """
-    Get all documents from database with pagination - FILTERED BY CURRENT USER
-    """
     try:
-        # ✅ Get current user's email (FIXED)
         current_user = get_current_user_email()
-        
+
         if not current_user:
-            # If not authenticated, return empty list
             return {
                 "documents": [],
                 "total": 0,
                 "skip": skip,
                 "limit": limit,
                 "current_user": None,
-                "message": "Not authenticated or could not identify user"
+                "message": "Not authenticated"
             }
-        
+
         print(f"📧 Fetching documents for user: {current_user}")
-        
-        # ✅ Filter documents by current user's account
+
+        # 🔥🔥🔥 ADD THIS BLOCK (MAIN FIX)
+        try:
+            print("🔄 Running background sync before fetching documents...")
+            ingestion = DriveIngestionService(drive_client, db)
+            ingestion.sync_all_files()
+        except Exception as e:
+            print(f"⚠️ Sync failed but continuing: {e}")
+        # 🔥🔥🔥 END FIX
+
         documents = db.query(Document).filter(
             Document.account_email == current_user
         ).offset(skip).limit(limit).all()
-        
+
         total = db.query(Document).filter(
             Document.account_email == current_user
         ).count()
-        
-        print(f"📊 Found {total} documents for {current_user}")
-        
+
         return {
             "documents": [
                 {
@@ -153,15 +191,16 @@ async def get_all_documents(
                     "modified_at": doc.modified_at.isoformat() if doc.modified_at else None,
                     "file_url": doc.file_url,
                     "status": doc.status,
-                    "account_email": doc.account_email  # Show which account owns it
+                    "account_email": doc.account_email
                 }
                 for doc in documents
             ],
             "total": total,
             "skip": skip,
             "limit": limit,
-            "current_user": current_user  # Show current logged-in user
+            "current_user": current_user
         }
+
     except Exception as e:
         import traceback
         print(f"❌ Error: {traceback.format_exc()}")
@@ -172,7 +211,7 @@ async def get_document_metadata(doc_id: str, db: Session = Depends(get_db)):
     """Get document metadata for Template Library editing"""
     doc = _get_document_by_any_id(db, doc_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        return {"tags": []}   # ✅ NO ERROR
     
     # Get sub-practice details
     sub_practice = db.query(SubPracticeArea).filter(SubPracticeArea.sub_practice_id == doc.sub_practice_id).first()
