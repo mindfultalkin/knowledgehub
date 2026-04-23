@@ -122,7 +122,7 @@ def logout():
     return {"message": "Logout successful. Delete token on client."}
 
 @router.post("", dependencies=[Depends(require_roles("ADMIN"))])
-def create_user(
+async def create_user(
     payload: CreateUserRequest,
     db: Session = Depends(get_db)
 ):
@@ -144,6 +144,10 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # ✅ SEND EMAIL
+    from utils.email_service import send_user_email
+    await send_user_email(user.email, payload.password)
 
     return {"message": "User created", "id": user.id}
 

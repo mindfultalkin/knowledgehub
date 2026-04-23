@@ -746,3 +746,75 @@ async def get_file_preview(file_id: str, db: Session = Depends(get_db)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
    
+
+# ==================== AND TAG SEARCH API ====================
+
+@router.get("/documents/search/by-tags")
+def search_documents_by_tags(
+    tags: str = Query(..., description="Comma separated tag names"),
+    db: Session = Depends(get_db)
+):
+    """
+    AND search → document must contain ALL tags
+    Example:
+    /documents/search/by-tags?tags=nda,employment
+    """
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+
+    if not tag_list:
+        return {"documents": []}
+
+    print("🔍 AND TAG SEARCH:", tag_list)
+
+    # STEP 1: Get tag IDs
+    tag_rows = db.query(Tag).filter(Tag.name.in_(tag_list)).all()
+
+    if len(tag_rows) != len(tag_list):
+        return {"documents": []}  # some tags not exist
+
+    tag_ids = [t.id for t in tag_rows]
+
+    # STEP 2: AND LOGIC
+    results = (
+        db.query(Document)
+        .join(DocumentTag, Document.id == DocumentTag.document_id)
+        .filter(DocumentTag.tag_id.in_(tag_ids))
+        .group_by(Document.id)
+        .having(text("COUNT(DISTINCT document_tags.tag_id) = :count"))
+        .params(count=len(tag_ids))
+        .all()
+    )
+
+    print(f"✅ Found {len(results)} documents")
+
+    return {
+        "documents": [
+            {
+                "id": doc.id,
+                "title": doc.title,
+                "file_url": doc.file_url
+            }
+            for doc in results
+        ]
+    }
+
+
+# ==================== TAG SUGGESTION API ====================
+
+@router.get("/tags/suggest")
+def suggest_tags(
+    q: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Auto-suggest tags (LIKE search)
+    """
+
+    results = db.query(Tag).filter(
+        Tag.name.ilike(f"{q}%")
+    ).limit(10).all()
+
+    return {
+        "tags": [t.name for t in results]
+    }

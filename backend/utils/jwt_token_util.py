@@ -3,7 +3,7 @@ from jose import jwt, JWTError
 
 SECRET_KEY = "m1ndfultalk_secret_key_001"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 15
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours — covers a full work session
 
 def create_access_token(data: dict):
     to_encode = data.copy()
