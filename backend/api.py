@@ -114,10 +114,17 @@ class ClauseWithTagsResponse(BaseModel):
 
 
 def _load_tags_from_doc(doc, db: Session):
+    """
+    Visible tag names for a document. `source='user_removed'` rows are
+    tombstones (the user explicitly removed them); they stay in the
+    table to block the auto-tagger but must never appear in any
+    user-facing list.
+    """
     doc_tags = db.query(DocumentTag, Tag).join(
         Tag, DocumentTag.tag_id == Tag.id
     ).filter(
-        DocumentTag.document_id == doc.id
+        DocumentTag.document_id == doc.id,
+        (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
     ).all()
     return [tag.name for doc_tag, tag in doc_tags]
 
@@ -300,16 +307,22 @@ async def get_files(
 
             ai_tags = []
             tag_count = 0
+            # Exclude `user_removed` tombstones from every aiTags surface
+            # so user removals are honored on the dashboard, header
+            # search cache, etc.
+            visible = (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
             if doc:
                 doc_tags = db.query(DocumentTag).filter(
-                    DocumentTag.document_id == doc.id
+                    DocumentTag.document_id == doc.id,
+                    visible,
                 ).join(Tag).all()
                 ai_tags = [dt.tag.name for dt in doc_tags]
                 tag_count = len(ai_tags)
                 print(f"🏷️ Found {tag_count} tags for {file['name']} via doc.id={doc.id}")
             else:
                 doc_tags = db.query(DocumentTag).join(Document).join(Tag).filter(
-                    Document.drive_file_id == file["id"]
+                    Document.drive_file_id == file["id"],
+                    visible,
                 ).all()
                 ai_tags = [dt.tag.name for dt in doc_tags]
                 tag_count = len(ai_tags)

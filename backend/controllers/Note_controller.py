@@ -451,6 +451,16 @@ def _persist_note_and_tag(
     modified_at = _parse_iso(file_info.get("modifiedTime")) or created_at
 
     # --- 1) Upsert the Document row ---
+    # If the user named their note like a template ("Quarterly Template",
+    # "NDA_Template.docx", …) classify it as TEMPLATE so it shows up on
+    # the Templates page and bumps the dashboard count immediately —
+    # matches the user's mental model of "if it has 'template' in the
+    # name, it's a template".
+    name_lower = (name or "").lower()
+    looks_like_template = any(
+        kw in name_lower for kw in ("template", "templates")
+    )
+
     # The `documents.content_type` column on production is a MySQL ENUM that
     # was created before the PRACTICE_NOTE / CLAUSE_SET / KNOWLEDGE_MATERIAL
     # values were added to the Python enum. Inserting PRACTICE_NOTE raises
@@ -459,7 +469,9 @@ def _persist_note_and_tag(
     # type first; if the column rejects it, we re-try with OTHER (which is
     # in every iteration of the schema and still lets the row be inserted).
     # See `migrations/widen_documents_content_type.sql` for the proper fix.
-    desired_type = ContentType.PRACTICE_NOTE
+    desired_type = (
+        ContentType.TEMPLATE if looks_like_template else ContentType.PRACTICE_NOTE
+    )
     fallback_type = ContentType.OTHER
 
     doc = db.query(Document).filter(Document.id == file_id).first()

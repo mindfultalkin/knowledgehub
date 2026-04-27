@@ -96,12 +96,18 @@ def _get_document_by_any_id(db: Session, document_id: str):
 
 def _load_tags_from_doc(doc, db: Session):
     """
-    Load tag names for a document
+    Load *visible* tag names for a document.
+
+    Rows whose source is ``'user_removed'`` are tombstones the user
+    explicitly removed from the UI. They stay in the table so the
+    Drive auto-tagger doesn't keep re-adding them, but they must never
+    appear in any user-facing tag list.
     """
     doc_tags = db.query(DocumentTag, Tag).join(
         Tag, DocumentTag.tag_id == Tag.id
     ).filter(
-        DocumentTag.document_id == doc.id
+        DocumentTag.document_id == doc.id,
+        (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
     ).all()
 
     return [tag.name for _, tag in doc_tags]
@@ -352,10 +358,12 @@ async def add_document_tag(document_id: str, payload: TagUpdateRequest, db: Sess
         else:
             print("➡️ Tag id:", tag.id)
 
-        # STEP 3: Check existing relation
+        # STEP 3: Check existing relation. If a tombstone row exists
+        # (source='user_removed' from a previous remove), flip it back
+        # to a real user-applied tag instead of inserting a duplicate.
         existing = db.execute(
             text("""
-                SELECT id FROM document_tags
+                SELECT id, source FROM document_tags
                 WHERE document_id = :doc_id AND tag_id = :tag_id
             """),
             {"doc_id": doc.id, "tag_id": tag.id}
@@ -363,7 +371,19 @@ async def add_document_tag(document_id: str, payload: TagUpdateRequest, db: Sess
 
         print("➡️ Existing document_tag row:", existing)
 
-        if not existing:
+        if existing and (existing[1] == "user_removed"):
+            print("♻️  Re-activating tombstoned tag link")
+            db.execute(
+                text("""
+                    UPDATE document_tags
+                       SET source = 'user',
+                           created_by = 'web_ui',
+                           created_at = NOW()
+                     WHERE id = :row_id
+                """),
+                {"row_id": existing[0]}
+            )
+        elif not existing:
             print("➡️ Attempting INSERT into document_tags")
 
             result = db.execute(
@@ -381,11 +401,12 @@ async def add_document_tag(document_id: str, payload: TagUpdateRequest, db: Sess
         print("➡️ Committing transaction")
         db.commit()
 
-        # STEP 5: Fetch ALL tags for this document
+        # STEP 5: Fetch ALL visible tags for this document (tombstones excluded).
         all_tags = db.query(Tag.name).join(
             DocumentTag, Tag.id == DocumentTag.tag_id
         ).filter(
-            DocumentTag.document_id == doc.id
+            DocumentTag.document_id == doc.id,
+            (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
         ).all()
 
         tags_list = [t[0] for t in all_tags]
@@ -426,6 +447,18 @@ async def add_document_tag(document_id: str, payload: TagUpdateRequest, db: Sess
 
 @router.post("/documents/{document_id}/tags/remove")
 async def remove_document_tag(document_id: str, payload: TagUpdateRequest, db: Session = Depends(get_db)):
+    """
+    Remove a tag from a document.
+
+    We don't physically delete the link — we tombstone it by flipping
+    `DocumentTag.source` to ``'user_removed'``. This is what stops the
+    Drive ingestion auto-tagger from re-adding the tag on the next
+    sync (it reads the tombstone as a per-document blocklist).
+
+    If no link existed in the first place (e.g. user is pre-emptively
+    blocking a tag the auto-tagger keeps wanting to add), we insert a
+    standalone tombstone row instead.
+    """
     try:
         tag_name = (payload.tag or "").strip()
         if not tag_name:
@@ -438,7 +471,10 @@ async def remove_document_tag(document_id: str, payload: TagUpdateRequest, db: S
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        effective_document_id = document_id  # 🔥
+        # Always anchor on the canonical primary key (doc.id); some Drive
+        # IDs / internal IDs disagree and the previous code wrote to the
+        # wrong row when the caller passed drive_file_id.
+        effective_document_id = doc.id
 
         tag = db.query(Tag).filter(Tag.name == tag_name).first()
         if not tag:
@@ -450,13 +486,27 @@ async def remove_document_tag(document_id: str, payload: TagUpdateRequest, db: S
         ).first()
 
         if doc_tag:
-            db.delete(doc_tag)
-            db.commit()
+            # Soft-delete: flip to a tombstone the auto-tagger respects.
+            doc_tag.source = "user_removed"
+            doc_tag.confidence_score = 0.0
+        else:
+            # No existing link — insert a standalone tombstone so future
+            # sync runs still treat this tag as blocked for this doc.
+            db.add(DocumentTag(
+                document_id=effective_document_id,
+                tag_id=tag.id,
+                source="user_removed",
+                confidence_score=0.0,
+            ))
+        db.commit()
 
+        # Read back the *visible* tag list (tombstones excluded) so the
+        # frontend can replace its local state without re-fetching.
         all_tags_from_db = db.query(Tag.name).join(
             DocumentTag, Tag.id == DocumentTag.tag_id
         ).filter(
-            DocumentTag.document_id == effective_document_id
+            DocumentTag.document_id == effective_document_id,
+            (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
         ).all()
 
         tags_list = [t[0] for t in all_tags_from_db if t and t[0]]
@@ -467,6 +517,8 @@ async def remove_document_tag(document_id: str, payload: TagUpdateRequest, db: S
             "tags": tags_list
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -529,9 +581,12 @@ async def list_templates(
                     print(f"⏭️ Skipping non-template or not in DB: {file['name']}")
                     continue
                 
-                # ✅ GET TAGS FOR THIS TEMPLATE FILE (if any)
+                # ✅ GET TAGS FOR THIS TEMPLATE FILE (if any).
+                # Exclude `source='user_removed'` tombstones so user
+                # removals stay removed in the listing.
                 tags_query = db.query(Tag.name).join(DocumentTag).filter(
-                    DocumentTag.document_id == doc.id
+                    DocumentTag.document_id == doc.id,
+                    (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
                 ).all()
                 
                 # ✅ Extract and clean tag names
@@ -693,12 +748,13 @@ async def get_file_preview(file_id: str, db: Session = Depends(get_db)):
         if not document:
             raise HTTPException(status_code=404, detail="File not found")
         
-        # Get tags for this document
+        # Get tags for this document, excluding `user_removed` tombstones.
         from models.metadata import DocumentTag, Tag
         doc_tags = db.query(DocumentTag, Tag).join(
             Tag, DocumentTag.tag_id == Tag.id
         ).filter(
-            DocumentTag.document_id == file_id
+            DocumentTag.document_id == file_id,
+            (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None))
         ).all()
         
         tags = [
@@ -775,11 +831,15 @@ def search_documents_by_tags(
 
     tag_ids = [t.id for t in tag_rows]
 
-    # STEP 2: AND LOGIC
+    # STEP 2: AND LOGIC. Tombstoned (`source='user_removed'`) links
+    # don't count — a tag the user removed must not satisfy the search.
     results = (
         db.query(Document)
         .join(DocumentTag, Document.id == DocumentTag.document_id)
-        .filter(DocumentTag.tag_id.in_(tag_ids))
+        .filter(
+            DocumentTag.tag_id.in_(tag_ids),
+            (DocumentTag.source != "user_removed") | (DocumentTag.source.is_(None)),
+        )
         .group_by(Document.id)
         .having(text("COUNT(DISTINCT document_tags.tag_id) = :count"))
         .params(count=len(tag_ids))

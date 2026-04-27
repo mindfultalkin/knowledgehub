@@ -188,28 +188,46 @@ class DriveIngestionService:
                 if drive_modified_at and db_modified_at and drive_modified_at > db_modified_at:
                     print(f"📝 File modified, updating metadata: {file_name}")
                     file_metadata = self._extract_metadata(file_data, account_email)
-                    
-                    # Only update content_type if it's not set yet
-                    if existing_doc.content_type is None:
-                        existing_doc.content_type = file_metadata.get('content_type')
-                    
-                    # Update other fields
+
+                    # Update other fields (everything except content_type)
                     for key, value in file_metadata.items():
-                        if key != 'content_type':  # Don't override existing content_type
+                        if key != 'content_type':
                             setattr(existing_doc, key, value)
-                    
+
                     existing_doc.db_updated_at = datetime.utcnow()
                     self.db.commit()
-                
-                # ⭐⭐⭐ ALWAYS CREATE TAGS - EVEN IF FILE UNCHANGED ⭐⭐⭐
-                print(f"🏷️  Creating content-based tags for: {file_name}")
-                self._create_simple_tags(drive_file_id, file_data)
-                
-                # Queue processing tasks if file was modified or never processed
-                if not existing_doc.last_indexed_at or (drive_modified_at and existing_doc.modified_at and drive_modified_at > existing_doc.modified_at):
+
+                # ⭐ Re-classify content_type from the *current* filename so
+                # renames in Drive (e.g. "Foo.docx" → "Foo_Template.docx")
+                # are reflected on the next sync. We only ever upgrade
+                # to/from TEMPLATE-vs-OTHER based on filename keywords —
+                # explicit categories set by other code (CLAUSE_SET,
+                # PRACTICE_NOTE, KNOWLEDGE_MATERIAL, etc.) are preserved.
+                self._reclassify_template_status(existing_doc, file_name)
+
+                # Re-tag ONLY when there's a reason to: either the file
+                # has never been indexed, or it was modified in Drive
+                # since the last index. Re-tagging on every sync used to
+                # silently undo user edits — e.g. a tag the user removed
+                # in the UI would be re-added by `_save_tags_to_database`
+                # because it rebuilds `source='content_analysis'` rows
+                # from scratch every run.
+                needs_retag = (
+                    not existing_doc.last_indexed_at
+                    or (
+                        drive_modified_at
+                        and existing_doc.modified_at
+                        and drive_modified_at > existing_doc.modified_at
+                    )
+                )
+                if needs_retag:
+                    print(f"🏷️  Creating content-based tags for: {file_name}")
+                    self._create_simple_tags(drive_file_id, file_data)
                     self._queue_processing_tasks(drive_file_id)
-                
-                return "updated_tags"
+                else:
+                    print(f"⏭️  Skipping tag regeneration (unchanged): {file_name}")
+
+                return "updated_tags" if needs_retag else "skipped"
                 
             else:
                 # New file
@@ -235,6 +253,52 @@ class DriveIngestionService:
             import traceback
             print(traceback.format_exc())
             raise
+
+    # Categories we manage automatically from the filename. Anything
+    # outside this set (e.g. CLAUSE_SET, PRACTICE_NOTE, KNOWLEDGE_MATERIAL)
+    # was set deliberately by another code path and must not be clobbered
+    # by a Drive sync.
+    _FILENAME_MANAGED_TYPES = {ContentType.TEMPLATE, ContentType.OTHER, None}
+
+    def _reclassify_template_status(self, doc: Document, file_name: str) -> None:
+        """
+        Keep a document's content_type in sync with its current Drive
+        filename. Handles the two cases the original sync missed:
+
+          * File was first ingested under a non-template name (stored as
+            OTHER) and later renamed to include "template" → upgrade.
+          * File was first ingested with "template" in its name and later
+            renamed to remove it → downgrade to OTHER.
+
+        Only documents that are currently TEMPLATE / OTHER / NULL are
+        touched — categories like PRACTICE_NOTE that were assigned by
+        Note_controller stay put.
+        """
+        try:
+            current = doc.content_type
+            if current not in self._FILENAME_MANAGED_TYPES:
+                return
+
+            looks_like_template = any(
+                kw in (file_name or "").lower()
+                for kw in ("template", "templates")
+            )
+            target = ContentType.TEMPLATE if looks_like_template else ContentType.OTHER
+
+            if current == target:
+                return
+
+            doc.content_type = target
+            self.db.commit()
+            print(
+                f"♻️  Reclassified {file_name}: "
+                f"{current.value if current else 'NULL'} → {target.value}"
+            )
+        except Exception as e:
+            # Reclassification is opportunistic — never let it break the
+            # surrounding sync.
+            self.db.rollback()
+            print(f"⚠️ Reclassify failed for {file_name}: {e}")
 
     def _create_simple_tags(self, document_id: str, file_data: Dict):
         """
@@ -323,31 +387,49 @@ class DriveIngestionService:
         return document_text
     
     def _save_tags_to_database(self, document_id: str, tags_to_create: List[str]):
-        """Save tags to database, creating them if they don't exist"""
+        """
+        Save content-analysis tags to the database.
+
+        Behavior:
+          * Tombstone rows (`source='user_removed'`) are *preserved* —
+            those represent tags the user explicitly removed in the UI
+            and must not be silently re-added.
+          * Existing `source='content_analysis'` rows are wiped and
+            rebuilt from the latest content.
+          * User-applied tags (`source='user'`) are left untouched.
+        """
         try:
-            # Remove any existing tags first (clean slate)
+            # 1) Build the per-document blocklist from existing tombstones.
+            #    Anything in here will be skipped no matter how many times
+            #    the auto-tagger thinks it should be applied.
+            blocked_rows = self.db.query(DocumentTag.tag_id).filter(
+                DocumentTag.document_id == document_id,
+                DocumentTag.source == "user_removed",
+            ).all()
+            blocked_tag_ids = {row[0] for row in blocked_rows}
+
+            # 2) Wipe ONLY the previous content-analysis links — leave
+            #    user-applied and user-removed rows alone.
             existing_tags = self.db.query(DocumentTag).filter(
                 DocumentTag.document_id == document_id,
                 DocumentTag.source == 'content_analysis'
             ).all()
             for tag in existing_tags:
                 self.db.delete(tag)
-            
+
             tags_added = 0
             for tag_name in set(tags_to_create):
-                # Check if tag is in master taxonomy
                 if not self._is_tag_in_master_taxonomy(tag_name):
                     print(f"   ⏭️ Skipping: {tag_name} (not in master taxonomy)")
                     continue
-                
+
                 # Find or create tag in database
                 tag = self.db.query(Tag).filter(Tag.name == tag_name).first()
                 if not tag:
-                    # Create new tag
                     category = "custom"
                     if ": " in tag_name:
                         category = tag_name.split(": ")[0]
-                    
+
                     tag = Tag(
                         name=tag_name,
                         category=category,
@@ -357,8 +439,12 @@ class DriveIngestionService:
                     self.db.add(tag)
                     self.db.flush()  # Get the ID
                     print(f"   📝 Created new tag: {tag_name}")
-                
-                # Link tag to document
+
+                # Honor the user's removal — never re-add a tombstoned tag.
+                if tag.id in blocked_tag_ids:
+                    print(f"   🚫 Skipping (user-removed): {tag_name}")
+                    continue
+
                 doc_tag = DocumentTag(
                     document_id=document_id,
                     tag_id=tag.id,
