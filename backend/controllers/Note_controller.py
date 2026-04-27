@@ -22,6 +22,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaInMemoryUpload
@@ -450,33 +451,71 @@ def _persist_note_and_tag(
     modified_at = _parse_iso(file_info.get("modifiedTime")) or created_at
 
     # --- 1) Upsert the Document row ---
+    # The `documents.content_type` column on production is a MySQL ENUM that
+    # was created before the PRACTICE_NOTE / CLAUSE_SET / KNOWLEDGE_MATERIAL
+    # values were added to the Python enum. Inserting PRACTICE_NOTE raises
+    # `pymysql.err.DataError: (1265, "Data truncated for column 'content_type'")`
+    # because MySQL doesn't recognize that value yet. We try the correct
+    # type first; if the column rejects it, we re-try with OTHER (which is
+    # in every iteration of the schema and still lets the row be inserted).
+    # See `migrations/widen_documents_content_type.sql` for the proper fix.
+    desired_type = ContentType.PRACTICE_NOTE
+    fallback_type = ContentType.OTHER
+
     doc = db.query(Document).filter(Document.id == file_id).first()
     if not doc:
-        doc = Document(
-            id=file_id,
-            drive_file_id=file_id,
-            title=name,
-            mime_type=file_info.get("mimeType"),
-            file_format=".docx",
-            file_url=file_info.get("webViewLink"),
-            icon_link=file_info.get("iconLink"),
-            thumbnail_link=file_info.get("thumbnailLink"),
-            content_type=ContentType.PRACTICE_NOTE,
-            owner_email=owner_email,
-            owner_name=owner_name,
-            account_email=owner_email,
-            created_at=created_at,
-            modified_at=modified_at,
-        )
+        def _build_doc(content_type_value: ContentType) -> Document:
+            return Document(
+                id=file_id,
+                drive_file_id=file_id,
+                title=name,
+                mime_type=file_info.get("mimeType"),
+                file_format=".docx",
+                file_url=file_info.get("webViewLink"),
+                icon_link=file_info.get("iconLink"),
+                thumbnail_link=file_info.get("thumbnailLink"),
+                content_type=content_type_value,
+                owner_email=owner_email,
+                owner_name=owner_name,
+                account_email=owner_email,
+                created_at=created_at,
+                modified_at=modified_at,
+            )
+
+        doc = _build_doc(desired_type)
         db.add(doc)
-        db.flush()
-        print(f"🗄️  Inserted document row for note: {file_id}")
+        try:
+            db.flush()
+            print(f"🗄️  Inserted document row for note: {file_id}")
+        except DataError as e:
+            # ENUM column doesn't know about PRACTICE_NOTE yet — recover by
+            # rolling back this flush, switching to OTHER, and retrying.
+            print(
+                f"⚠️  ENUM rejected '{desired_type.value}' for {file_id} "
+                f"({e.orig if hasattr(e, 'orig') else e}); "
+                f"retrying with '{fallback_type.value}'. "
+                "Run the documents.content_type migration to fix this."
+            )
+            db.rollback()
+            doc = _build_doc(fallback_type)
+            db.add(doc)
+            db.flush()
+            print(f"🗄️  Inserted document row for note (fallback type): {file_id}")
     else:
         # Edge case: row exists (e.g. Drive sync ran between request start
-        # and DB write). Just make sure content_type is set.
+        # and DB write). Just make sure content_type is set. Apply the same
+        # fallback dance so we never blow up if the ENUM is too narrow.
         if doc.content_type is None:
-            doc.content_type = ContentType.PRACTICE_NOTE
-            db.flush()
+            doc.content_type = desired_type
+            try:
+                db.flush()
+            except DataError:
+                db.rollback()
+                # Re-load the doc since the rollback expired it.
+                doc = db.query(Document).filter(Document.id == file_id).first()
+                if doc is not None and doc.content_type is None:
+                    doc.content_type = fallback_type
+                    db.flush()
 
     # --- 2) Auto "Note" tag ---
     note_tag = _upsert_tag(db, _NOTE_TAG_NAME, category="document_type")
