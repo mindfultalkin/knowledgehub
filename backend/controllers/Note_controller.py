@@ -18,10 +18,10 @@ After the Google Doc is created we also:
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaInMemoryUpload
@@ -62,6 +62,11 @@ class CreateNoteRequest(BaseModel):
     # Optional rich-text HTML. When present, it takes precedence over `content`
     # and is converted to a native Google Doc by Drive on upload.
     htmlContent: Optional[str] = None
+    # Optional list of user-supplied custom tags to attach to the new note,
+    # in addition to the auto "Note" tag. Applied server-side in the same
+    # DB transaction as the document row, so they can never be partially
+    # applied due to JWT expiry / network failures on the client.
+    tags: List[str] = Field(default_factory=list)
 
 
 # ==================== ROUTES ====================
@@ -148,11 +153,20 @@ async def create_note(request: CreateNoteRequest, db: Session = Depends(get_db))
             ).execute()
             print(f"✅ Note content written to doc: {doc_id}")
 
-        # ---- Persist to DB + attach the "Note" tag ----
+        # Normalize and de-duplicate the user-supplied custom tags. We do
+        # this here (rather than inside the persist helper) so the response
+        # accurately reflects what was attempted — even if the DB write
+        # later fails for some reason.
+        custom_tags = _sanitize_tags(request.tags)
+
+        # ---- Persist to DB + attach the "Note" tag + apply user tags ----
         # Wrapped in its own try so a DB problem never fails the whole request
         # (the Doc itself was already created successfully in Drive).
+        applied_tags: List[str] = []
         try:
-            _persist_note_and_tag(db, file_info)
+            applied_tags = _persist_note_and_tag(
+                db, file_info, custom_tags=custom_tags
+            )
         except Exception as persist_err:
             print(f"⚠️  Note saved to Drive, but DB persistence failed: {persist_err}")
             import traceback
@@ -166,6 +180,9 @@ async def create_note(request: CreateNoteRequest, db: Session = Depends(get_db))
             "webViewLink": file_info.get("webViewLink"),
             "createdTime": file_info.get("createdTime"),
             "autoTag": _NOTE_TAG_NAME,
+            # Echo back exactly which tags ended up linked. Frontend uses this
+            # to refresh its local view without an extra round-trip.
+            "appliedTags": applied_tags,
         }
 
     except HTTPException:
@@ -317,16 +334,93 @@ def _parse_iso(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _persist_note_and_tag(db: Session, file_info: dict) -> None:
+def _sanitize_tags(raw: Optional[List[str]]) -> List[str]:
+    """
+    Trim, drop empties, drop duplicates (case-insensitive), and reject the
+    reserved auto tag name ("Note") since the controller adds that itself.
+    Order is preserved so the response matches the user's input order.
+    """
+    if not raw:
+        return []
+    seen: set[str] = set()
+    out: List[str] = []
+    for t in raw:
+        if not isinstance(t, str):
+            continue
+        cleaned = t.strip()
+        if not cleaned:
+            continue
+        if cleaned.lower() == _NOTE_TAG_NAME.lower():
+            # The auto-tag is applied unconditionally; ignore client-supplied
+            # duplicates so we don't insert a second link.
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(cleaned)
+    return out
+
+
+def _upsert_tag(db: Session, name: str, category: Optional[str] = None) -> Tag:
+    """Find a Tag by exact name, or create it. Caller must commit/flush."""
+    tag = db.query(Tag).filter(Tag.name == name).first()
+    if tag:
+        return tag
+    tag = Tag(name=name, category=category)
+    db.add(tag)
+    db.flush()
+    print(f"🏷️  Created tag: {name}")
+    return tag
+
+
+def _link_tag(
+    db: Session,
+    document_id: str,
+    tag: Tag,
+    source: str,
+    confidence_score: float,
+    created_by: Optional[str],
+) -> bool:
+    """
+    Link a tag to a document if the link doesn't already exist. Returns True
+    if a new row was inserted, False if the link was already present.
+    """
+    already = db.query(DocumentTag).filter(
+        DocumentTag.document_id == document_id,
+        DocumentTag.tag_id == tag.id,
+    ).first()
+    if already:
+        return False
+    db.add(DocumentTag(
+        document_id=document_id,
+        tag_id=tag.id,
+        source=source,
+        confidence_score=confidence_score,
+        created_by=created_by,
+    ))
+    print(f"🔗 Linked document {document_id} to '{tag.name}' tag")
+    return True
+
+
+def _persist_note_and_tag(
+    db: Session,
+    file_info: dict,
+    custom_tags: Optional[List[str]] = None,
+) -> List[str]:
     """
     Insert a `documents` row for the freshly-created note (if not already
-    present) and attach the canonical "Note" tag. Idempotent — safe to call
-    more than once for the same file_id.
+    present) and attach the canonical "Note" tag plus any user-supplied
+    custom tags. Idempotent — safe to call more than once for the same
+    file_id (existing links are skipped).
+
+    Returns the full list of tag names now linked to this document
+    (auto + custom), in display order: ["Note", *custom_tags].
     """
     file_id = file_info.get("id")
     name = file_info.get("name")
     if not file_id or not name:
-        return
+        return []
 
     owners = file_info.get("owners") or []
     owner_email = owners[0].get("emailAddress") if owners else None
@@ -363,27 +457,39 @@ def _persist_note_and_tag(db: Session, file_info: dict) -> None:
             doc.content_type = ContentType.PRACTICE_NOTE
             db.flush()
 
-    # --- 2) Upsert the "Note" tag ---
-    note_tag = db.query(Tag).filter(Tag.name == _NOTE_TAG_NAME).first()
-    if not note_tag:
-        note_tag = Tag(name=_NOTE_TAG_NAME, category="document_type")
-        db.add(note_tag)
-        db.flush()
-        print(f"🏷️  Created tag: {_NOTE_TAG_NAME}")
+    # --- 2) Auto "Note" tag ---
+    note_tag = _upsert_tag(db, _NOTE_TAG_NAME, category="document_type")
+    _link_tag(
+        db,
+        document_id=file_id,
+        tag=note_tag,
+        source="auto_note",
+        confidence_score=1.0,
+        created_by=owner_email,
+    )
 
-    # --- 3) Link them (if not already linked) ---
-    already = db.query(DocumentTag).filter(
-        DocumentTag.document_id == file_id,
-        DocumentTag.tag_id == note_tag.id,
-    ).first()
-    if not already:
-        db.add(DocumentTag(
-            document_id=file_id,
-            tag_id=note_tag.id,
-            source="auto_note",
-            confidence_score=1.0,
-            created_by=owner_email,
-        ))
-        print(f"🔗 Linked document {file_id} to '{_NOTE_TAG_NAME}' tag")
+    # --- 3) User-supplied custom tags ---
+    # Each is upserted into the master `tags` table (no category — these
+    # are user-driven, not part of the auto-taxonomy) and linked with
+    # source="user" so it's clear they came from a human.
+    applied_custom: List[str] = []
+    for tag_name in (custom_tags or []):
+        try:
+            tag = _upsert_tag(db, tag_name, category=None)
+            _link_tag(
+                db,
+                document_id=file_id,
+                tag=tag,
+                source="user",
+                confidence_score=1.0,
+                created_by=owner_email,
+            )
+            applied_custom.append(tag.name)
+        except Exception as e:
+            # Don't let one bad tag (e.g. unique-constraint race) take
+            # down the entire request — log and keep going.
+            print(f"⚠️  Could not attach tag '{tag_name}' to {file_id}: {e}")
 
     db.commit()
+
+    return [_NOTE_TAG_NAME, *applied_custom]
