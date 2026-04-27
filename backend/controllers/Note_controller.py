@@ -161,16 +161,29 @@ async def create_note(request: CreateNoteRequest, db: Session = Depends(get_db))
 
         # ---- Persist to DB + attach the "Note" tag + apply user tags ----
         # Wrapped in its own try so a DB problem never fails the whole request
-        # (the Doc itself was already created successfully in Drive).
+        # (the Doc itself was already created successfully in Drive). Any
+        # failure is captured and surfaced back to the client in the response
+        # so the UI can show a meaningful error, instead of silently appearing
+        # to succeed while no tags ever land in the database.
         applied_tags: List[str] = []
+        db_persisted = False
+        persist_error: Optional[str] = None
         try:
             applied_tags = _persist_note_and_tag(
                 db, file_info, custom_tags=custom_tags
             )
+            db_persisted = True
         except Exception as persist_err:
+            persist_error = f"{type(persist_err).__name__}: {persist_err}"
             print(f"⚠️  Note saved to Drive, but DB persistence failed: {persist_err}")
             import traceback
             traceback.print_exc()
+            # Roll back any partial writes so the session is clean for the
+            # rest of this request and any subsequent dependents.
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
         return {
             "success": True,
@@ -183,6 +196,14 @@ async def create_note(request: CreateNoteRequest, db: Session = Depends(get_db))
             # Echo back exactly which tags ended up linked. Frontend uses this
             # to refresh its local view without an extra round-trip.
             "appliedTags": applied_tags,
+            # Diagnostic fields so the frontend (and the user) can tell when
+            # the Drive doc was created but the DB layer failed. The note is
+            # still recoverable via the next Drive sync — but tags will be
+            # missing in the meantime, which is exactly the bug we hit in
+            # production where the persistence error was being hidden.
+            "dbPersisted": db_persisted,
+            "dbWarning": persist_error,
+            "requestedTags": custom_tags,
         }
 
     except HTTPException:
